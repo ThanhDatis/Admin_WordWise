@@ -128,11 +128,11 @@ function MainLayout() {
   const isAdmin = currentUser?.roles?.includes('Admin') || isSuperAdmin;
 
   const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-    { text: 'Users', icon: <PeopleIcon />, path: '/users', show: isAdmin },
-    { text: 'Courses', icon: <BookIcon />, path: '/courses' },
-    { text: 'Lessons', icon: <SchoolIcon />, path: '/lessons' },
-    { text: 'Content Reports', icon: <ReportIcon />, path: '/reports', show: isAdmin },
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/admin' },
+    { text: 'Users', icon: <PeopleIcon />, path: '/admin/users', show: isAdmin },
+    { text: 'FlashCardSet', icon: <BookIcon />, path: '/admin/flashcardset' },
+    { text: 'MultipleChoice', icon: <SchoolIcon />, path: '/admin/multiplechoice' },
+    { text: 'Content Reports', icon: <ReportIcon />, path: '/admin/reports', show: isAdmin },
   ].filter(item => item.show === undefined || item.show);
 
   // If not authenticated yet, don't render

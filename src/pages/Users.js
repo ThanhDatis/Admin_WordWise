@@ -36,113 +36,147 @@ import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
   FilterList as FilterListIcon,
+  Visibility as ViewIcon, // Thay FilterListIcon thành ViewIcon cho rõ nghĩa hơn
 } from '@mui/icons-material';
-import { userService } from '../services/api';
+import { userService } from '../services/api'; // Đảm bảo đường dẫn đúng
 
 const Users = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(20);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [emailSearch, setEmailSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
+  // const [page, setPage] = useState(0); // Xóa state không dùng
+  const [currentPage, setCurrentPage] = useState(0); // State cho trang hiện tại (0-based index)
+  const [rowsPerPage, setRowsPerPage] = useState(10); // Bắt đầu với 10 hoặc 20 thay vì 1
+  const [totalItems, setTotalItems] = useState(0); // State cho tổng số users
+  // const [totalPages, setTotalPages] = useState(0); // Không cần thiết nếu có totalItems
+  const [filters, setFilters] = useState({ email: '', role: '' }); // Gom filter vào một state object
+  const [appliedFilters, setAppliedFilters] = useState({ email: '', role: '' }); // State lưu filter đã áp dụng
   const [openDialog, setOpenDialog] = useState(false);
-  const [currentUser, setCurrentUser] = useState({
-    userId: '',
-    userName: '',
-    email: '',
-    password: '',
-    roles: [],
-    gender: true,
-    level: 0,
-    status: 'Active',
-  });
+  const [currentUser, setCurrentUser] = useState(null); // Khởi tạo là null
   const [isEdit, setIsEdit] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
     severity: 'success',
   });
-  const [currentPage, setCurrentPage] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
+  // const [searchQuery, setSearchQuery] = useState(''); // Xóa state thừa
 
   // Function to fetch users from API
-  const fetchUsers = async () => {
+  const fetchUsers = async (pageIndex, pageSize, currentFilters) => {
     setLoading(true);
+    setError(null); // Reset lỗi trước mỗi lần fetch
     try {
-      const response = await userService.getAllUsers(currentPage + 1, rowsPerPage, emailSearch, roleFilter);
+      // API yêu cầu page 1-based
+      const apiPage = pageIndex + 1;
+      const response = await userService.getAllUsers(
+          apiPage,
+          pageSize,
+          currentFilters.email || null, // Gửi null nếu rỗng
+          currentFilters.role || null   // Gửi null nếu rỗng
+      );
+
+      console.log("API Response:", response); // Kiểm tra response
+
       setUsers(response.inforUsers || []);
-      setTotalItems(response.totalItems || response.inforUsers?.length || 0);
-      setTotalPages(response.totalPage || 0);
-      setCurrentPage(response.curentPage ? response.curentPage - 1 : 0);
+
+      // *** TÍNH TOÁN totalItems ***
+      if (response.totalPage && response.itemPerPage) {
+        // Tính toán nếu API không trả về totalItems trực tiếp
+        const calculatedTotalItems = response.totalPage * response.itemPerPage;
+        // Có thể cần điều chỉnh nếu trang cuối không đủ item, nhưng đây là ước tính tốt nhất
+        setTotalItems(calculatedTotalItems);
+         // Nếu API có trả về totalItems thì dùng nó: setTotalItems(response.totalItems || 0);
+      } else {
+         // Fallback nếu không có totalPage hoặc itemPerPage
+         setTotalItems(response.inforUsers?.length || 0);
+         // Hoặc nếu biết chắc là có totalItems thì dùng:
+         // setTotalItems(response.totalItems || response.inforUsers?.length || 0);
+      }
+
+
+      // *** KHÔNG CẬP NHẬT currentPage Ở ĐÂY ***
+      // setCurrentPage(response.curentPage ? response.curentPage - 1 : 0); // <--- XÓA DÒNG NÀY
+
     } catch (error) {
       console.error("Failed to fetch users:", error);
-      setSnackbar({ open: true, message: "Failed to fetch users", severity: "error" });
+      const errorMessage = error.response?.data?.message || error.response?.data || error.message || "Failed to fetch users";
+      setError(errorMessage); // Hiển thị lỗi cụ thể hơn
+      setSnackbar({ open: true, message: errorMessage, severity: "error" });
+      setUsers([]); // Xóa dữ liệu cũ khi có lỗi
+      setTotalItems(0);
     } finally {
       setLoading(false);
     }
   };
 
+  // useEffect chỉ fetch khi trang, số dòng/trang, hoặc filter *đã áp dụng* thay đổi
   useEffect(() => {
-    fetchUsers();
-  }, [currentPage, rowsPerPage, emailSearch, roleFilter]);
+    fetchUsers(currentPage, rowsPerPage, appliedFilters);
+  }, [currentPage, rowsPerPage, appliedFilters]); // Chỉ fetch khi các state này thay đổi
 
   const handleChangePage = (event, newPage) => {
-    setCurrentPage(newPage);
+    setCurrentPage(newPage); // Chỉ cần cập nhật state, useEffect sẽ xử lý việc fetch
   };
 
   const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setCurrentPage(0);
+    const newRowsPerPage = parseInt(event.target.value, 10);
+    setRowsPerPage(newRowsPerPage);
+    setCurrentPage(0); // Reset về trang đầu khi thay đổi số dòng/trang
   };
 
-  const handleSearch = (e) => {
-    setSearchQuery(e.target.value);
-    setCurrentPage(0);
-    fetchUsers();
+  // Cập nhật state filter nháp khi người dùng nhập liệu
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleEmailChange = (e) => {
-    setEmailSearch(e.target.value);
+  // Hàm xử lý khi nhấn nút Apply Filters hoặc Enter
+  const handleApplyFilters = () => {
+    setCurrentPage(0); // Reset về trang đầu khi áp dụng filter mới
+    setAppliedFilters(filters); // Cập nhật filter đã áp dụng, trigger useEffect
   };
 
-  const handleRoleFilterChange = (e) => {
-    setRoleFilter(e.target.value);
-  };
-
-  const handleKeyPress = (e) => {
+  // Xử lý nhấn Enter trong ô tìm kiếm email
+  const handleEmailKeyPress = (e) => {
     if (e.key === 'Enter') {
-      handleSearch();
+      handleApplyFilters();
     }
   };
 
+  // Reset filter và fetch lại
+  const handleResetFilters = () => {
+    setFilters({ email: '', role: '' });
+    setCurrentPage(0);
+    setAppliedFilters({ email: '', role: '' }); // Reset applied filters để trigger fetch
+  };
+
+  // Mở dialog thêm/sửa
   const handleOpenDialog = (user = null) => {
     if (user) {
+      // Đảm bảo dùng đúng tên trường 'id' từ API
       setCurrentUser({
-        userId: user.userId,
-        userName: user.userName,
-        email: user.email,
-        password: '',
-        roles: user.roles || [],
-        gender: user.gender,
-        level: user.level,
-        status: user.status || 'Active',
+        id: user.id, // Dùng 'id'
+        userName: user.userName || '',
+        email: user.email || '',
+        password: '', // Không hiển thị password cũ
+        roles: user.roles || ['User'], // Mặc định là User nếu không có
+        gender: user.gender === undefined ? true : user.gender, // Xử lý trường hợp undefined
+        level: user.level || 0,
+        // status: user.status || 'Active', // API response ví dụ không có status
       });
       setIsEdit(true);
     } else {
+      // Reset form cho user mới
       setCurrentUser({
-        userId: '',
+        id: '',
         userName: '',
         email: '',
         password: '',
-        roles: ['User'],
-        gender: true,
+        roles: ['User'], // Mặc định là User khi tạo mới
+        gender: true, // Mặc định là Male
         level: 0,
-        status: 'Active',
+        // status: 'Active',
       });
       setIsEdit(false);
     }
@@ -151,144 +185,133 @@ const Users = () => {
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
+    setCurrentUser(null); // Reset currentUser khi đóng dialog
   };
 
-  const handleInputChange = (e) => {
+  // Cập nhật state currentUser trong dialog
+  const handleDialogInputChange = (e) => {
     const { name, value } = e.target;
-    
-    // Convert numeric values to numbers
-    if (name === 'level') {
-      setCurrentUser({
-        ...currentUser,
-        [name]: value === '' ? '' : Number(value), // Allow empty string during typing
-      });
-    } else {
-      setCurrentUser({
-        ...currentUser,
-        [name]: value,
-      });
-    }
+    setCurrentUser(prev => ({
+      ...prev,
+      [name]: name === 'level' ? (value === '' ? '' : Number(value)) : value,
+    }));
   };
 
-  const handleRoleChange = (e) => {
-    setCurrentUser({
-      ...currentUser,
-      roles: Array.isArray(e.target.value) ? e.target.value : [e.target.value],
-    });
+  const handleDialogRoleChange = (e) => {
+    const { value } = e.target;
+    setCurrentUser(prev => ({
+      ...prev,
+      roles: typeof value === 'string' ? value.split(',') : value, // Xử lý giá trị select multiple
+    }));
   };
 
   const handleSaveUser = async () => {
+    if (!currentUser) return;
+
+    // Simple validation example
+    if (!currentUser.email || !currentUser.userName || (!isEdit && !currentUser.password)) {
+        setSnackbar({ open: true, message: "Please fill in all required fields.", severity: "warning" });
+        return;
+    }
+     if (!isEdit && currentUser.password && !/^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{6,}$/.test(currentUser.password)) {
+       setSnackbar({ open: true, message: "Password must be at least 6 chars, with 1 uppercase, 1 number, 1 special char.", severity: "warning" });
+       return;
+     }
+
+
+    setLoading(true); // Có thể thêm loading state riêng cho dialog
     try {
-      setLoading(true);
+      let message = '';
+      // Chuẩn bị data gửi đi (chỉ gửi những trường cần thiết)
+       const userData = {
+           userName: currentUser.userName,
+           email: currentUser.email,
+           gender: currentUser.gender,
+           level: parseInt(currentUser.level, 10) || 0,
+           roles: currentUser.roles,
+           // Chỉ gửi password khi tạo mới hoặc nếu muốn cho phép cập nhật password
+           ...(isEdit ? {} : { password: currentUser.password }), // Chỉ gửi password khi tạo mới
+       };
+
       if (isEdit) {
-        await userService.updateUser(currentUser.userId, currentUser);
-        setSnackbar({
-          open: true,
-          message: 'User updated successfully',
-          severity: 'success',
-        });
+        // Khi update, thường chỉ cần gửi những trường thay đổi, hoặc toàn bộ trừ password
+        // API của bạn cần endpoint update (ví dụ: updateUser(userId, data))
+        await userService.updateUser(currentUser.id, userData); // Giả sử có hàm này
+        message = 'User updated successfully';
       } else {
-        // Check if we're registering an admin (by looking at roles)
-        if (currentUser.roles.includes('Admin') && !isEdit) {
-          // Use register-admin endpoint
-          const adminData = {
-            email: currentUser.email,
-            password: currentUser.password || '',
-            userName: currentUser.userName,
-            gender: currentUser.gender,
-            level: parseInt(currentUser.level, 10),
-          };
-          await userService.registerAdmin(adminData);
-          setSnackbar({
-            open: true,
-            message: 'Admin user registered successfully',
-            severity: 'success',
-          });
+        // Khi tạo mới
+        // Kiểm tra nếu tạo admin (ví dụ)
+        if (currentUser.roles.includes('Admin') || currentUser.roles.includes('SuperAdmin')) {
+           // API có thể cần endpoint riêng như registerAdmin
+           // Hoặc endpoint createUser xử lý được việc gán role
+           const adminData = { ...userData, password: currentUser.password };
+           // await userService.registerAdmin(adminData); // Nếu có endpoint riêng
+           await userService.createUser(adminData); // Nếu dùng endpoint chung
+           message = 'Admin user created successfully';
         } else {
-          // Use standard create user endpoint
-          await userService.createUser(currentUser);
-          setSnackbar({
-            open: true,
-            message: 'User created successfully',
-            severity: 'success',
-          });
+            const createData = { ...userData, password: currentUser.password };
+            await userService.createUser(createData); // Dùng endpoint chung
+            message = 'User created successfully';
         }
       }
-      fetchUsers();
+
+      setSnackbar({ open: true, message: message, severity: 'success' });
+      fetchUsers(currentPage, rowsPerPage, appliedFilters); // Fetch lại dữ liệu
       handleCloseDialog();
     } catch (err) {
       console.error("Error saving user:", err);
-      setSnackbar({
-        open: true,
-        message: err.response?.data || 'Error saving user',
-        severity: 'error',
-      });
+      const errorMessage = err.response?.data?.message || err.response?.data || err.message || 'Error saving user';
+      setSnackbar({ open: true, message: errorMessage, severity: 'error' });
     } finally {
-      setLoading(false);
+      setLoading(false); // Tắt loading dialog
     }
   };
 
   const handleDeleteUser = async (id) => {
-    if (window.confirm('Are you sure you want to delete this user?')) {
+    // Xác nhận trước khi xóa
+    if (window.confirm(`Are you sure you want to delete user ${id.substring(0,8)}...? This action cannot be undone.`)) {
+      setLoading(true); // Có thể dùng loading state riêng
       try {
-        setLoading(true);
-        await userService.deleteUser(id);
-        setSnackbar({
-          open: true,
-          message: 'User deleted successfully',
-          severity: 'success',
-        });
-        fetchUsers();
+        await userService.deleteUser(id); // Giả sử có hàm này
+        setSnackbar({ open: true, message: 'User deleted successfully', severity: 'success' });
+        // Fetch lại trang hiện tại, hoặc về trang đầu nếu trang hiện tại trống sau khi xóa
+        fetchUsers(currentPage, rowsPerPage, appliedFilters);
       } catch (err) {
         console.error("Error deleting user:", err);
-        setSnackbar({
-          open: true,
-          message: err.response?.data || 'Error deleting user',
-          severity: 'error',
-        });
+        const errorMessage = err.response?.data?.message || err.response?.data || err.message || 'Error deleting user';
+        setSnackbar({ open: true, message: errorMessage, severity: 'error' });
       } finally {
         setLoading(false);
       }
     }
   };
 
-  const handleViewFlashcardSets = (userId) => {
-    navigate(`/users/${userId}/flashcards`);
+  // Điều hướng sang trang xem chi tiết hoặc trang khác liên quan đến user
+  const handleViewUserDetails = (userId) => {
+     // navigate(`/admin/users/${userId}`); // Ví dụ đường dẫn chi tiết
+     console.log("Navigate to details for user:", userId);
+     // Hoặc mở một dialog chi tiết khác nếu không muốn chuyển trang
   };
+
 
   const handleCloseSnackbar = () => {
-    setSnackbar({
-      ...snackbar,
-      open: false,
-    });
+    setSnackbar({ ...snackbar, open: false });
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Active':
-        return 'success';
-      case 'Inactive':
-        return 'default';
-      case 'Suspended':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
+  // Helper function để hiển thị roles
   const getRoleChips = (roles) => {
-    if (!roles || !Array.isArray(roles) || roles.length === 0) {
-      return <Chip label="User" size="small" />;
+    if (!Array.isArray(roles) || roles.length === 0) {
+      return <Chip label="User" size="small" variant="outlined" />;
     }
-
     return (
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
         {roles.map((role) => (
-          <Chip 
-            key={role} 
-            label={role} 
+          <Chip
+            key={role}
+            label={role}
             size="small"
-            color={role === 'Admin' || role === 'SuperAdmin' ? 'primary' : 'default'}
+            color={role === 'Admin' || role === 'SuperAdmin' ? 'primary' : 'secondary'}
+            variant="filled"
           />
         ))}
       </Box>
@@ -296,145 +319,174 @@ const Users = () => {
   };
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4">Users Management</Typography>
+    <Box sx={{ p: 2 }}> {/* Thêm padding chung */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5" component="h1">Users Management</Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
+          disabled={loading} // Disable nút khi đang loading
         >
-          Add Admin
+          Add User
         </Button>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {/* Thông báo lỗi tổng quát */}
+      {error && !loading && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
 
-      <Paper sx={{ width: '100%', mb: 2 }}>
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between' }}>
+      {/* Phần Filter */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
           <TextField
             placeholder="Search by email..."
             variant="outlined"
             size="small"
-            value={emailSearch}
-            onChange={handleEmailChange}
-            onKeyPress={handleKeyPress}
+            name="email" // Thêm name
+            value={filters.email}
+            onChange={handleFilterChange}
+            onKeyPress={handleEmailKeyPress} // Xử lý Enter
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton onClick={handleSearch} size="small">
-                    <SearchIcon fontSize="small" />
-                  </IconButton>
+                  <SearchIcon fontSize="small"/>
                 </InputAdornment>
               ),
             }}
-            sx={{ width: '40%' }}
+            sx={{ flexGrow: 1, minWidth: '250px' }} // Cho phép co giãn
           />
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>Role</InputLabel>
-              <Select
-                value={roleFilter}
-                onChange={handleRoleFilterChange}
-                label="Role"
-              >
-                <MenuItem value="">
-                  <em>All</em>
-                </MenuItem>
-                <MenuItem value="User">User</MenuItem>
-                <MenuItem value="Admin">Admin</MenuItem>
-                <MenuItem value="SuperAdmin">SuperAdmin</MenuItem>
-              </Select>
-            </FormControl>
-            <Button 
-              variant="outlined" 
-              size="small"
-              onClick={handleSearch}
-              startIcon={<SearchIcon />}
+          <FormControl variant="outlined" size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Role</InputLabel>
+            <Select
+              name="role" // Thêm name
+              value={filters.role}
+              onChange={handleFilterChange}
+              label="Role"
             >
-              Apply Filters
-            </Button>
-            <Tooltip title="Refresh">
-              <IconButton onClick={fetchUsers}>
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
+              <MenuItem value="">
+                <em>All Roles</em>
+              </MenuItem>
+              <MenuItem value="User">User</MenuItem>
+              <MenuItem value="Admin">Admin</MenuItem>
+              <MenuItem value="SuperAdmin">SuperAdmin</MenuItem>
+              {/* Thêm các role khác nếu có */}
+            </Select>
+          </FormControl>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleApplyFilters} // Gọi hàm áp dụng filter
+            startIcon={<SearchIcon />}
+            disabled={loading}
+          >
+            Search
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleResetFilters}
+            startIcon={<RefreshIcon />}
+            disabled={loading}
+          >
+            Reset
+          </Button>
         </Box>
+      </Paper>
 
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <>
-            <TableContainer>
-              <Table sx={{ minWidth: 750 }} aria-labelledby="tableTitle">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>ID</TableCell>
-                    <TableCell>Username</TableCell>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Roles</TableCell>
-                    <TableCell>Gender</TableCell>
-                    <TableCell>Level</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+      {/* Bảng dữ liệu */}
+      <Paper sx={{ width: '100%', overflow: 'hidden' }}> {/* Thêm overflow */}
+        <TableContainer>
+          <Table stickyHeader sx={{ minWidth: 750 }} aria-labelledby="tableTitle" size="small">
+            <TableHead>
+              <TableRow>
+                {/* Có thể thêm sort nếu API hỗ trợ */}
+                <TableCell>ID</TableCell>
+                <TableCell>Username</TableCell>
+                <TableCell>Email</TableCell>
+                <TableCell>Roles</TableCell>
+                <TableCell>Gender</TableCell>
+                <TableCell>Level</TableCell>
+                <TableCell align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                    <CircularProgress />
+                  </TableCell>
+                </TableRow>
+              ) : users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                    <Typography>No users found matching your criteria.</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((user) => (
+                  <TableRow hover key={user.id} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                    <TableCell component="th" scope="row">
+                       <Tooltip title={user.id}>
+                          <span>{user.id.substring(0, 8)}...</span>
+                       </Tooltip>
+                    </TableCell>
+                    <TableCell>{user.userName}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>{getRoleChips(user.roles)}</TableCell>
+                    <TableCell>{user.gender ? 'Male' : 'Female'}</TableCell>
+                    <TableCell>{user.level}</TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="View Details">
+                        {/* Đổi icon và hành động nếu cần */}
+                        <IconButton size="small" onClick={() => handleViewUserDetails(user.id)} color="default">
+                          <ViewIcon fontSize="inherit" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit User">
+                        <IconButton size="small" onClick={() => handleOpenDialog(user)} color="primary">
+                          <EditIcon fontSize="inherit" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete User">
+                        {/* Disable nút xóa nếu user là SuperAdmin chẳng hạn */}
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteUser(user.id)}
+                          color="error"
+                          // disabled={user.roles?.includes('SuperAdmin')}
+                        >
+                          <DeleteIcon fontSize="inherit"/>
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
-                </TableHead>
-                <TableBody>
-                  {users.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} align="center">
-                        No users found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    users.map((user) => (
-                      <TableRow hover key={user.id}>
-                        <TableCell>{user.id.substr(0, 8)}...</TableCell>
-                        <TableCell>{user.userName}</TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>{getRoleChips(user.roles)}</TableCell>
-                        <TableCell>{user.gender ? 'Male' : 'Female'}</TableCell>
-                        <TableCell>{user.level}</TableCell>
-                        <TableCell align="right">
-                          <Tooltip title="View Flashcard Sets">
-                            <IconButton onClick={() => handleViewFlashcardSets(user.id)}>
-                              <FilterListIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Edit">
-                            <IconButton onClick={() => handleOpenDialog(user)}>
-                              <EditIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton onClick={() => handleDeleteUser(user.id)}>
-                              <DeleteIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            <TablePagination
-              rowsPerPageOptions={[5, 10, 25]}
-              component="div"
-              count={totalItems}
-              rowsPerPage={rowsPerPage}
-              page={currentPage}
-              onPageChange={handleChangePage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-            />
-          </>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {/* Chỉ hiển thị Pagination nếu có dữ liệu và không loading */}
+        {totalItems > 0 && !loading && (
+          <TablePagination
+            rowsPerPageOptions={[5, 10, 20, 50]} // Điều chỉnh options nếu cần
+            component="div"
+            count={totalItems} // Sử dụng totalItems đã tính toán/lấy về
+            rowsPerPage={rowsPerPage}
+            page={currentPage} // Sử dụng currentPage (0-based index)
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            // Thêm label để rõ ràng hơn, đặc biệt khi count là ước tính
+             labelDisplayedRows={({ from, to, count }) =>
+                 // Nếu count là tính toán từ totalPages, có thể ghi chú
+                 `${from}–${to} of ${count}` // Giữ nguyên nếu API trả về totalItems chính xác
+                 // `${from}–${to} of approx. ${count}` // Nếu count là ước tính
+             }
+          />
         )}
       </Paper>
 
@@ -442,92 +494,103 @@ const Users = () => {
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>{isEdit ? 'Edit User' : 'Add New User'}</DialogTitle>
         <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <TextField
-              fullWidth
-              margin="dense"
-              label="Username"
-              name="userName"
-              value={currentUser.userName}
-              onChange={handleInputChange}
-              required
-            />
-            <TextField
-              fullWidth
-              margin="dense"
-              label="Email"
-              name="email"
-              type="email"
-              value={currentUser.email}
-              onChange={handleInputChange}
-              required
-            />
-            {!isEdit && (
+          {/* Chỉ render form khi currentUser có giá trị */}
+          {currentUser && (
+            <Box component="form" noValidate autoComplete="off" sx={{ mt: 1 }}>
               <TextField
                 fullWidth
                 margin="dense"
-                label="Password"
-                name="password"
-                type="password"
-                value={currentUser.password}
-                onChange={handleInputChange}
+                label="Username"
+                name="userName"
+                value={currentUser.userName}
+                onChange={handleDialogInputChange}
                 required
-                helperText="Password must include at least 1 uppercase letter, 1 special character, and 1 number"
+                variant="outlined"
               />
-            )}
-            <FormControl fullWidth margin="dense">
-              <InputLabel>Roles</InputLabel>
-              <Select
-                multiple
-                name="roles"
-                value={currentUser.roles}
-                label="Roles"
-                onChange={handleRoleChange}
-                renderValue={(selected) => (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {selected.map((value) => (
-                      <Chip key={value} label={value} size="small" />
-                    ))}
-                  </Box>
-                )}
-              >
-                <MenuItem value="User">User</MenuItem>
-                <MenuItem value="Admin">Admin</MenuItem>
-                <MenuItem value="SuperAdmin">SuperAdmin</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl fullWidth margin="dense">
-              <InputLabel>Gender</InputLabel>
-              <Select
-                name="gender"
-                value={currentUser.gender}
-                label="Gender"
-                onChange={handleInputChange}
-              >
-                <MenuItem value={true}>Male</MenuItem>
-                <MenuItem value={false}>Female</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField
-              fullWidth
-              margin="dense"
-              label="Level"
-              name="level"
-              type="number"
-              value={currentUser.level}
-              onChange={handleInputChange}
-              InputProps={{ inputProps: { min: 0 } }}
-            />
-          </Box>
+              <TextField
+                fullWidth
+                margin="dense"
+                label="Email"
+                name="email"
+                type="email"
+                value={currentUser.email}
+                onChange={handleDialogInputChange}
+                required
+                variant="outlined"
+                // disabled={isEdit} // Có thể không cho sửa email
+              />
+              {/* Chỉ hiển thị password khi tạo mới */}
+              {!isEdit && (
+                <TextField
+                  fullWidth
+                  margin="dense"
+                  label="Password"
+                  name="password"
+                  type="password"
+                  value={currentUser.password}
+                  onChange={handleDialogInputChange}
+                  required={!isEdit} // Bắt buộc khi tạo mới
+                  variant="outlined"
+                  helperText="Min 6 chars, 1 uppercase, 1 number, 1 special char (!@#$%^&*)"
+                />
+              )}
+               <FormControl fullWidth margin="dense" variant="outlined">
+                 <InputLabel>Roles</InputLabel>
+                 <Select
+                   multiple
+                   name="roles"
+                   value={currentUser.roles}
+                   label="Roles"
+                   onChange={handleDialogRoleChange}
+                   renderValue={(selected) => (
+                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                       {(selected || []).map((value) => ( // Xử lý selected có thể là null/undefined
+                         <Chip key={value} label={value} size="small" />
+                       ))}
+                     </Box>
+                   )}
+                 >
+                   {/* Có thể lấy danh sách role từ API */}
+                   <MenuItem value="User">User</MenuItem>
+                   <MenuItem value="Admin">Admin</MenuItem>
+                   <MenuItem value="SuperAdmin">SuperAdmin</MenuItem>
+                 </Select>
+               </FormControl>
+              <FormControl fullWidth margin="dense" variant="outlined">
+                <InputLabel>Gender</InputLabel>
+                <Select
+                  name="gender"
+                  value={currentUser.gender}
+                  label="Gender"
+                  onChange={handleDialogInputChange}
+                >
+                  <MenuItem value={true}>Male</MenuItem>
+                  <MenuItem value={false}>Female</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                fullWidth
+                margin="dense"
+                label="Level"
+                name="level"
+                type="number"
+                value={currentUser.level}
+                onChange={handleDialogInputChange}
+                InputProps={{ inputProps: { min: 0 } }}
+                variant="outlined"
+              />
+            </Box>
+          )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button 
-            onClick={handleSaveUser} 
+        <DialogActions sx={{ px: 3, pb: 2 }}> {/* Thêm padding */}
+          <Button onClick={handleCloseDialog} color="inherit">Cancel</Button>
+          <Button
+            onClick={handleSaveUser}
             variant="contained"
-            disabled={loading}
+            disabled={loading} // Disable khi đang lưu
+            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
           >
-            {loading ? <CircularProgress size={24} /> : 'Save'}
+            Save
           </Button>
         </DialogActions>
       </Dialog>
@@ -535,13 +598,14 @@ const Users = () => {
       {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={6000}
+        autoHideDuration={5000} // Giảm thời gian một chút
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert
           onClose={handleCloseSnackbar}
           severity={snackbar.severity}
+          variant="filled" // Dùng filled cho nổi bật
           sx={{ width: '100%' }}
         >
           {snackbar.message}
@@ -551,4 +615,4 @@ const Users = () => {
   );
 };
 
-export default Users; 
+export default Users;

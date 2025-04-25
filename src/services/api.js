@@ -171,8 +171,37 @@ export const flashCardService = {
     } catch (error) {
       throw error;
     }
+  },
+
+  getAllFlashcardSetsAdmin: async (params = {}) => {
+    const {
+      flashCardSetId,
+      learningLanguage,
+      nativeLanguage,
+      page = 1,         // Giá trị mặc định từ API description
+      itemPerPage = 20, // Giá trị mặc định từ API description
+    } = params;
+  
+    // Xây dựng các tham số query chỉ bao gồm những giá trị được cung cấp
+    const queryParams = { page, itemPerPage };
+    if (flashCardSetId) queryParams.flashCardSetId = flashCardSetId;
+    if (learningLanguage) queryParams.learningLanguage = learningLanguage;
+    if (nativeLanguage) queryParams.nativeLanguage = nativeLanguage;
+  
+    try {
+      console.log("Calling GET /api/FlashCardSet/admin/GetAllAdmin with params:", queryParams);
+      const response = await API.get('/FlashCardSet/admin/GetAllAdmin', {
+        params: queryParams
+      });
+      console.log("Response from GET /api/FlashCardSet/admin/GetAllAdmin:", response.data);
+      return response.data; // Trả về dữ liệu từ API
+    } catch (error) {
+      console.error("Error fetching admin flashcard sets:", error.response?.data || error.message);
+      throw error; // Ném lỗi để component gọi có thể xử lý
+    }
   }
 };
+
 
 // Content report API calls
 export const reportService = {
@@ -190,7 +219,7 @@ export const reportService = {
     } = filters;
     
     try {
-      const response = await API.get('/api/ContentReport/GetAllReport', {
+      const response = await API.get('/ContentReport/GetAllReport', {
         params: { 
           reportId, 
           userId, 
@@ -229,6 +258,43 @@ export const reportService = {
       throw error;
     }
   }
+
 };
+
+
+export const multipleChoiceTestService = {
+  // Get all Multiplechoice test
+  getAllMultipleChoiceTestsAdmin: async (params = {}) => {
+    const {
+      multipleChoiceTestId,
+      learningLanguage,
+      nativeLanguage,
+      page = 1,         // Giá trị mặc định từ API description
+      itemPerPage = 20, // Giá trị mặc định từ API description
+    } = params;
+
+    // Xây dựng các tham số query chỉ bao gồm những giá trị được cung cấp
+    const queryParams = { page, itemPerPage };
+    if (multipleChoiceTestId) queryParams.multipleChoiceTestId = multipleChoiceTestId;
+    if (learningLanguage) queryParams.learningLanguage = learningLanguage;
+    if (nativeLanguage) queryParams.nativeLanguage = nativeLanguage;
+
+    try {
+      console.log("Calling GET /api/MultipleChoiceTest/admin/GetAllAdmin with params:", queryParams);
+      const response = await API.get('/MultipleChoiceTest/admin/GetAllAdmin', {
+        params: queryParams
+      });
+      console.log("Response from GET /api/MultipleChoiceTest/admin/GetAllAdmin:", response.data);
+      return response.data; // Trả về dữ liệu từ API
+    } catch (error) {
+      console.error("Error fetching admin multiple choice tests:", error.response?.data || error.message);
+      throw error; // Ném lỗi để component gọi có thể xử lý
+    }
+  }
+
+
+}
+
+
 
 export default API; 

@@ -43,38 +43,43 @@ import {
 } from '@mui/icons-material';
 import { reportService, userService } from '../services/api';
 
-// Enum for content types
-const ContentTypeReport = {
-  FLASHCARD_SET: 1,
-  FLASHCARD: 2,
-  LESSON: 3,
-  COMMENT: 4,
-};
+// --- BỎ ENUM SỐ NÀY ĐI HOẶC CẬP NHẬT NẾU MUỐN DÙNG STRING ---
+// const ContentTypeReport = {
+//   FLASHCARD_SET: 1,
+//   FLASHCARD: 2,
+//   LESSON: 3,
+//   COMMENT: 4,
+// };
 
-// Enum for report status
+// Enum for report status (CÁI NÀY VẪN ĐÚNG VÌ API DÙNG SỐ)
 const ReportStatus = {
   PENDING: 0,
   APPROVED: 1,
   REJECTED: 2,
 };
 
-// Convert content type enum to readable string
-const getContentTypeLabel = (type) => {
-  switch (type) {
-    case ContentTypeReport.FLASHCARD_SET:
+// *** SỬA HÀM NÀY ĐỂ NHẬN STRING ***
+// Convert content type string to readable string
+const getContentTypeLabel = (typeString) => {
+  // Thêm các case dựa trên các giá trị string thực tế API trả về
+  switch (typeString) {
+    case 'FlashcardSet': // Giả sử API trả về 'FlashcardSet'
       return 'Flashcard Set';
-    case ContentTypeReport.FLASHCARD:
+    case 'Flashcard': // Giả sử API trả về 'Flashcard'
       return 'Flashcard';
-    case ContentTypeReport.LESSON:
+    case 'Lesson': // Giả sử API trả về 'Lesson'
       return 'Lesson';
-    case ContentTypeReport.COMMENT:
+    case 'Comment': // Giả sử API trả về 'Comment'
       return 'Comment';
+    case 'MultipleChoice': // Dựa trên ví dụ API của bạn
+      return 'Multiple Choice';
+    // Thêm các loại khác nếu có
     default:
-      return 'Unknown';
+      return typeString || 'Unknown'; // Hiển thị chuỗi gốc nếu không khớp
   }
 };
 
-// Convert status enum to readable string and color
+// Convert status enum to readable string and color (HÀM NÀY VẪN ĐÚNG)
 const getStatusInfo = (status) => {
   switch (status) {
     case ReportStatus.PENDING:
@@ -93,8 +98,8 @@ const ContentReports = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [totalItems, setTotalItems] = useState(0);
+  // const [totalPages, setTotalPages] = useState(0); // Không cần thiết nếu có totalItems
+  const [totalItems, setTotalItems] = useState(0); // Sử dụng totalItems cho TablePagination
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [selectedReport, setSelectedReport] = useState(null);
   const [openReportDialog, setOpenReportDialog] = useState(false);
@@ -104,16 +109,16 @@ const ContentReports = () => {
     message: '',
     severity: 'success',
   });
-  
+
   // Filters
   const [filters, setFilters] = useState({
     userId: '',
-    contentType: '',
-    status: '',
+    contentType: '', // Sẽ là string
+    status: '',       // Sẽ là number (hoặc string rỗng)
     sortBy: 'CreateAt',
     isDesc: true,
   });
-  
+
   // Open filters
   const [openFilters, setOpenFilters] = useState(false);
 
@@ -121,19 +126,47 @@ const ContentReports = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await reportService.getAllReports({
-        ...filters,
-        currentPage: page + 1, // API uses 1-based indexing
+
+      const apiParams = {
+        userId: filters.userId || null, // Gửi null nếu rỗng để API bỏ qua
+        contentType: filters.contentType || null, // Gửi null nếu rỗng
+        status: filters.status !== '' ? Number(filters.status) : null, // Gửi null nếu rỗng, ép kiểu số nếu có giá trị
+        sortBy: filters.sortBy,
+        isDesc: filters.isDesc,
+        currentPage: page + 1, // API dùng 1-based indexing
         itemPerPage: rowsPerPage,
-      });
-      
-      setReports(response.contentReports);
-      setTotalItems(response.totalCount);
-      setTotalPages(response.totalPages);
+      };
+
+      console.log("Sending API params:", apiParams); // Log để debug params gửi đi
+
+      const response = await reportService.getAllReports(apiParams);
+
+      console.log("API Response:", response); // Log để xem response thực tế
+
+      // *** SỬA CÁCH LẤY DỮ LIỆU TỪ RESPONSE ***
+      if (response && response.contentReports) {
+        setReports(response.contentReports);
+        // Tính toán totalItems nếu API không trả về totalCount
+        // Sử dụng response.totalPage (tên trường đúng từ API)
+        const calculatedTotalItems = (response.totalPage || 0) * (response.itemPerPage || rowsPerPage);
+        setTotalItems(calculatedTotalItems);
+        // setTotalPages(response.totalPage || 0); // Không cần set totalPages nữa
+      } else {
+        // Xử lý trường hợp response không hợp lệ
+        setReports([]);
+        setTotalItems(0);
+        // setTotalPages(0);
+        console.warn("API response structure might be different:", response);
+      }
+
     } catch (err) {
       console.error('Error fetching reports:', err);
-      setError(err.response?.data || 'Failed to load reports');
+      const errorMessage = err.response?.data?.message || err.response?.data || err.message || 'Failed to load reports';
+      setError(errorMessage);
+      // Reset state khi có lỗi
+      setReports([]);
+      setTotalItems(0);
+      // setTotalPages(0);
     } finally {
       setLoading(false);
     }
@@ -141,7 +174,16 @@ const ContentReports = () => {
 
   useEffect(() => {
     fetchReports();
-  }, [page, rowsPerPage, filters]);
+    // Bỏ filters ra khỏi dependency array nếu không muốn fetch lại khi gõ từng chữ vào TextField
+    // Thay vào đó gọi fetchReports trong nút Apply của bộ lọc
+  }, [page, rowsPerPage, filters.sortBy, filters.isDesc]); // Chỉ fetch lại khi page, rowsPerPage, sort thay đổi
+
+
+  // Hàm này chỉ gọi fetch khi nhấn Apply Filters
+  const applyFilters = () => {
+    setPage(0); // Reset về trang đầu khi áp dụng bộ lọc mới
+    fetchReports();
+  }
 
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
@@ -158,7 +200,8 @@ const ContentReports = () => {
       ...prev,
       [name]: value,
     }));
-    setPage(0); // Reset to first page when changing filters
+    // Không fetch lại ngay lập tức, đợi nhấn Apply
+    // setPage(0);
   };
 
   const handleSortChange = (field) => {
@@ -167,18 +210,20 @@ const ContentReports = () => {
       sortBy: field,
       isDesc: prev.sortBy === field ? !prev.isDesc : true,
     }));
-    setPage(0);
+    setPage(0); // Fetch lại khi sort thay đổi (do useEffect)
   };
 
   const handleViewReport = async (reportId) => {
     try {
-      setLoading(true);
-      const report = await reportService.getReportById(reportId);
+      setLoading(true); // Nên có loading riêng cho dialog?
+      const report = await reportService.getReportById(reportId); // Giả sử API này trả về chi tiết
       setSelectedReport(report);
       setOpenReportDialog(true);
     } catch (err) {
       console.error('Error fetching report details:', err);
-      setError(err.response?.data || 'Failed to load report details');
+      const errorMessage = err.response?.data?.message || err.response?.data || err.message || 'Failed to load report details';
+      setSnackbar({ open: true, message: errorMessage, severity: 'error' });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -192,66 +237,48 @@ const ContentReports = () => {
   const handleUpdateReportStatus = async (reportId, newStatus) => {
     try {
       setProcessing(true);
-      const response = await reportService.updateReportStatus(reportId, newStatus);
-      
-      // Update the local state
+      // API updateReportStatus có thể trả về message hoặc report đã update
+      const responseMessage = await reportService.updateReportStatus(reportId, newStatus);
+
+      // Cập nhật trạng thái trong bảng (optimistic update)
       setReports((prevReports) =>
         prevReports.map((report) =>
-          report.reportId === reportId ? { ...report, status: newStatus } : report
+          report.contentReportId === reportId ? { ...report, status: newStatus } : report
         )
       );
-      
-      // If we're viewing a report, update its status
-      if (selectedReport && selectedReport.reportId === reportId) {
+
+      // Cập nhật trạng thái trong dialog nếu đang mở
+      if (selectedReport && selectedReport.contentReportId === reportId) {
         setSelectedReport((prev) => ({ ...prev, status: newStatus }));
       }
-      
-      // Show success notification
+
       setSnackbar({
         open: true,
-        message: response || 'Set status report successfully.',
+        message: responseMessage || 'Report status updated successfully.',
         severity: 'success',
       });
-      
-      // Close the dialog if open
-      if (openReportDialog) {
-        handleCloseReportDialog();
-      }
-      
-      // Refresh the data
-      fetchReports();
+
+      // Đóng dialog sau khi cập nhật thành công (nếu đang mở)
+      // if (openReportDialog) {
+      //   handleCloseReportDialog(); // Có thể giữ dialog mở để xem kết quả
+      // }
+
+      // Có thể fetch lại để đảm bảo dữ liệu đồng bộ hoàn toàn, nhưng optimistic update thường đủ
+      // fetchReports();
     } catch (err) {
       console.error('Error updating report status:', err);
-      
       let errorMessage;
       if (err.response) {
-        switch (err.response.status) {
-          case 400:
-            errorMessage = 'Invalid report status value.';
-            break;
-          case 404:
-            errorMessage = 'Report not found.';
-            break;
-          case 403:
-            errorMessage = 'You do not have permission to perform this action.';
-            break;
-          case 401:
-            errorMessage = 'Authentication required. Please login again.';
-            break;
-          default:
-            errorMessage = err.response.data || 'Failed to update report status.';
-        }
-      } else {
-        errorMessage = 'Network error. Please try again.';
-      }
-      
+           errorMessage = err.response.data?.message || err.response.data || `Error ${err.response.status}: Failed to update status.`;
+       } else {
+           errorMessage = err.message || 'Network error. Please try again.';
+       }
       setSnackbar({
         open: true,
         message: errorMessage,
         severity: 'error',
       });
-      
-      setError(errorMessage);
+      // Không cần setError ở đây vì đã có snackbar
     } finally {
       setProcessing(false);
     }
@@ -266,7 +293,11 @@ const ContentReports = () => {
       isDesc: true,
     });
     setPage(0);
+    // Fetch lại dữ liệu với bộ lọc đã reset
+    // Cần gọi fetchReports thủ công ở đây vì filters object reference không đổi nếu chỉ reset field
+     fetchReports(); // Fetch lại sau khi reset
   };
+
 
   const handleCloseSnackbar = () => {
     setSnackbar({
@@ -279,16 +310,21 @@ const ContentReports = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h4">Content Reports Management</Typography>
-        <Button
-          variant="outlined"
-          startIcon={<FilterListIcon />}
-          onClick={() => setOpenFilters(!openFilters)}
-        >
-          Filters
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+           <IconButton onClick={fetchReports} disabled={loading} title="Refresh Data">
+                <RefreshIcon />
+            </IconButton>
+            <Button
+              variant="outlined"
+              startIcon={<FilterListIcon />}
+              onClick={() => setOpenFilters(!openFilters)}
+            >
+              Filters
+            </Button>
+        </Box>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && !loading && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
       {/* Filters */}
       {openFilters && (
@@ -302,6 +338,13 @@ const ContentReports = () => {
                 value={filters.userId}
                 onChange={handleFilterChange}
                 size="small"
+                InputProps={{ // Thêm nút search nhỏ
+                     endAdornment: (
+                       <InputAdornment position="end">
+                         <SearchIcon />
+                       </InputAdornment>
+                     ),
+                   }}
               />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
@@ -313,11 +356,14 @@ const ContentReports = () => {
                   label="Content Type"
                   onChange={handleFilterChange}
                 >
+                  {/* *** SỬA VALUE CHO KHỚP VỚI STRING API *** */}
                   <MenuItem value="">All Types</MenuItem>
-                  <MenuItem value={ContentTypeReport.FLASHCARD_SET}>Flashcard Set</MenuItem>
-                  <MenuItem value={ContentTypeReport.FLASHCARD}>Flashcard</MenuItem>
-                  <MenuItem value={ContentTypeReport.LESSON}>Lesson</MenuItem>
-                  <MenuItem value={ContentTypeReport.COMMENT}>Comment</MenuItem>
+                  <MenuItem value="FlashcardSet">Flashcard Set</MenuItem>
+                  <MenuItem value="Flashcard">Flashcard</MenuItem>
+                  <MenuItem value="Lesson">Lesson</MenuItem>
+                  <MenuItem value="Comment">Comment</MenuItem>
+                  <MenuItem value="MultipleChoice">Multiple Choice</MenuItem>
+                  {/* Thêm các loại khác nếu có */}
                 </Select>
               </FormControl>
             </Grid>
@@ -326,7 +372,7 @@ const ContentReports = () => {
                 <InputLabel>Status</InputLabel>
                 <Select
                   name="status"
-                  value={filters.status}
+                  value={filters.status} // status là number hoặc ''
                   label="Status"
                   onChange={handleFilterChange}
                 >
@@ -339,19 +385,22 @@ const ContentReports = () => {
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button 
-                  variant="contained" 
-                  fullWidth 
-                  onClick={fetchReports}
+                <Button
+                  variant="contained"
+                  fullWidth
+                  // onClick={fetchReports} // Gọi fetch khi nhấn Apply
+                  onClick={applyFilters} // Sửa thành hàm apply
                   disabled={loading}
+                  startIcon={<SearchIcon />}
                 >
                   Apply
                 </Button>
-                <Button 
-                  variant="outlined" 
-                  fullWidth 
+                <Button
+                  variant="outlined"
+                  fullWidth
                   onClick={resetFilters}
                   disabled={loading}
+                  startIcon={<RefreshIcon />}
                 >
                   Reset
                 </Button>
@@ -361,226 +410,276 @@ const ContentReports = () => {
         </Paper>
       )}
 
-      <Paper sx={{ width: '100%', mb: 2 }}>
-        {loading ? (
+      <Paper sx={{ width: '100%', mb: 2, overflow: 'hidden' }}> {/* Thêm overflow: 'hidden' */}
+        {loading && ( // Hiển thị loading overlay hoặc progress bar thay vì thay thế toàn bộ bảng
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress />
           </Box>
-        ) : reports.length === 0 ? (
-          <Box sx={{ p: 3, textAlign: 'center' }}>
-            <Typography variant="body1">No reports found.</Typography>
-          </Box>
-        ) : (
-          <>
-            <TableContainer>
-              <Table sx={{ minWidth: 750 }} aria-labelledby="tableTitle">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>
-                      <TableSortLabel
-                        active={filters.sortBy === 'ReportId'}
+        )}
+
+        {/* Luôn hiển thị TableContainer, chỉ ẩn TableBody khi loading hoặc không có data */}
+        <TableContainer>
+          <Table sx={{ minWidth: 750 }} aria-labelledby="tableTitle" size="medium">
+            <TableHead>
+              <TableRow>
+                {/* *** Đảm bảo SortBy khớp với tên trường API hoặc mapping nếu cần *** */}
+                <TableCell sortDirection={filters.sortBy === 'ContentReportId' ? (filters.isDesc ? 'desc' : 'asc') : false}>
+                    <TableSortLabel
+                        active={filters.sortBy === 'ContentReportId'} // Giả sử API sort bằng 'ContentReportId'
                         direction={filters.isDesc ? 'desc' : 'asc'}
-                        onClick={() => handleSortChange('ReportId')}
-                      >
+                        onClick={() => handleSortChange('ContentReportId')}
+                    >
                         Report ID
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={filters.sortBy === 'UserId'}
-                        direction={filters.isDesc ? 'desc' : 'asc'}
-                        onClick={() => handleSortChange('UserId')}
-                      >
-                        Reported By
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>Content ID</TableCell>
-                    <TableCell>
-                      <TableSortLabel
+                    </TableSortLabel>
+                </TableCell>
+                 <TableCell sortDirection={filters.sortBy === 'UserId' ? (filters.isDesc ? 'desc' : 'asc') : false}>
+                     <TableSortLabel
+                         active={filters.sortBy === 'UserId'}
+                         direction={filters.isDesc ? 'desc' : 'asc'}
+                         onClick={() => handleSortChange('UserId')}
+                     >
+                         Reported By (User ID)
+                     </TableSortLabel>
+                 </TableCell>
+                <TableCell>Content ID</TableCell>
+                <TableCell sortDirection={filters.sortBy === 'ContentType' ? (filters.isDesc ? 'desc' : 'asc') : false}>
+                    <TableSortLabel
                         active={filters.sortBy === 'ContentType'}
                         direction={filters.isDesc ? 'desc' : 'asc'}
                         onClick={() => handleSortChange('ContentType')}
-                      >
+                    >
                         Content Type
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>Reason</TableCell>
-                    <TableCell>
-                      <TableSortLabel
+                    </TableSortLabel>
+                 </TableCell>
+                <TableCell>Reason</TableCell>
+                <TableCell sortDirection={filters.sortBy === 'Status' ? (filters.isDesc ? 'desc' : 'asc') : false}>
+                    <TableSortLabel
                         active={filters.sortBy === 'Status'}
                         direction={filters.isDesc ? 'desc' : 'asc'}
                         onClick={() => handleSortChange('Status')}
-                      >
+                    >
                         Status
-                      </TableSortLabel>
+                    </TableSortLabel>
+                </TableCell>
+                 <TableCell sortDirection={filters.sortBy === 'CreateAt' ? (filters.isDesc ? 'desc' : 'asc') : false}>
+                     <TableSortLabel
+                         active={filters.sortBy === 'CreateAt'}
+                         direction={filters.isDesc ? 'desc' : 'asc'}
+                         onClick={() => handleSortChange('CreateAt')}
+                     >
+                         Created At
+                     </TableSortLabel>
+                 </TableCell>
+                <TableCell align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {/* Chỉ hiển thị nội dung khi không loading VÀ có dữ liệu */}
+              {!loading && reports.length > 0 && reports.map((report) => {
+                // Đổi tên reportId thành contentReportId cho khớp API
+                const statusInfo = getStatusInfo(report.status);
+                return (
+                  <TableRow hover key={report.contentReportId} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                    {/* Nên hiển thị toàn bộ ID hoặc dùng Tooltip */}
+                    <TableCell component="th" scope="row">
+                       <Tooltip title={report.contentReportId}>
+                           <span>{report.contentReportId.substring(0, 8)}...</span>
+                       </Tooltip>
                     </TableCell>
                     <TableCell>
-                      <TableSortLabel
-                        active={filters.sortBy === 'CreateAt'}
-                        direction={filters.isDesc ? 'desc' : 'asc'}
-                        onClick={() => handleSortChange('CreateAt')}
-                      >
-                        Created At
-                      </TableSortLabel>
+                       <Tooltip title={report.userId}>
+                           <span>{report.userId.substring(0, 8)}...</span>
+                       </Tooltip>
                     </TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {reports.map((report) => {
-                    const statusInfo = getStatusInfo(report.status);
-                    return (
-                      <TableRow hover key={report.reportId}>
-                        <TableCell>{report.reportId.substring(0, 8)}...</TableCell>
-                        <TableCell>{report.userId}</TableCell>
-                        <TableCell>{report.contentId.substring(0, 8)}...</TableCell>
-                        <TableCell>{getContentTypeLabel(report.contentType)}</TableCell>
-                        <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {report.reason}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={statusInfo.label}
-                            color={statusInfo.color}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>{new Date(report.createAt).toLocaleDateString()}</TableCell>
-                        <TableCell align="right">
-                          <Tooltip title="View Details">
-                            <IconButton onClick={() => handleViewReport(report.reportId)}>
-                              <VisibilityIcon />
+                     <TableCell>
+                        <Tooltip title={report.contentId}>
+                             <span>{report.contentId.substring(0, 8)}...</span>
+                         </Tooltip>
+                     </TableCell>
+                    {/* *** SỬ DỤNG HÀM ĐÃ SỬA *** */}
+                    <TableCell>{getContentTypeLabel(report.contentType)}</TableCell>
+                    <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <Tooltip title={report.reason}>
+                        <span>{report.reason}</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={statusInfo.label}
+                        color={statusInfo.color}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{new Date(report.createAt).toLocaleDateString()}</TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="View Details">
+                        {/* Đổi tên reportId thành contentReportId */}
+                        <IconButton size="small" onClick={() => handleViewReport(report.contentReportId)}>
+                          <VisibilityIcon fontSize="small"/>
+                        </IconButton>
+                      </Tooltip>
+                      {report.status === ReportStatus.PENDING && (
+                        <>
+                          <Tooltip title="Approve">
+                            <IconButton
+                              size="small"
+                              color="success"
+                              // Đổi tên reportId thành contentReportId
+                              onClick={() => handleUpdateReportStatus(report.contentReportId, ReportStatus.APPROVED)}
+                              disabled={processing}
+                            >
+                              <ApproveIcon fontSize="small"/>
                             </IconButton>
                           </Tooltip>
-                          {report.status === ReportStatus.PENDING && (
-                            <>
-                              <Tooltip title="Approve">
-                                <IconButton 
-                                  color="success"
-                                  onClick={() => handleUpdateReportStatus(report.reportId, ReportStatus.APPROVED)}
-                                  disabled={processing}
-                                >
-                                  <ApproveIcon />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Reject">
-                                <IconButton 
-                                  color="error"
-                                  onClick={() => handleUpdateReportStatus(report.reportId, ReportStatus.REJECTED)}
-                                  disabled={processing}
-                                >
-                                  <RejectIcon />
-                                </IconButton>
-                              </Tooltip>
-                            </>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                          <Tooltip title="Reject">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              // Đổi tên reportId thành contentReportId
+                              onClick={() => handleUpdateReportStatus(report.contentReportId, ReportStatus.REJECTED)}
+                              disabled={processing}
+                            >
+                              <RejectIcon fontSize="small"/>
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {/* Hiển thị thông báo "No reports found" nếu không loading và không có data */}
+              {!loading && reports.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} align="center">
+                     <Typography variant="body1" sx={{ p: 3 }}>No reports found matching your criteria.</Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {/* Chỉ hiển thị Pagination nếu có dữ liệu */}
+        {totalItems > 0 && !loading && (
             <TablePagination
               rowsPerPageOptions={[10, 20, 50]}
               component="div"
+              // *** SỬ DỤNG totalItems ĐÃ TÍNH TOÁN ***
               count={totalItems}
               rowsPerPage={rowsPerPage}
               page={page}
               onPageChange={handleChangePage}
               onRowsPerPageChange={handleChangeRowsPerPage}
+              // Thêm label để rõ ràng hơn
+               labelDisplayedRows={({ from, to, count }) =>
+                   `${from}–${to} of approx. ${count}` // Ghi chú là 'approx.' vì count được tính toán
+               }
             />
-          </>
-        )}
+         )}
       </Paper>
 
       {/* Report Details Dialog */}
       <Dialog
         open={openReportDialog}
         onClose={handleCloseReportDialog}
-        maxWidth="md"
+        maxWidth="sm" // Giảm kích thước dialog nếu nội dung không quá nhiều
         fullWidth
       >
-        <DialogTitle>Report Details</DialogTitle>
+        {/* Thêm tiêu đề động */}
+        <DialogTitle>Report Details {selectedReport ? `(${selectedReport.contentReportId.substring(0,8)}...)` : ''}</DialogTitle>
         <DialogContent dividers>
+          {/* Thêm loading khi chờ load detail */}
+           {loading && !selectedReport && <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>}
           {selectedReport && (
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle1" fontWeight="bold">Report ID</Typography>
-                <Typography variant="body1" gutterBottom>{selectedReport.reportId}</Typography>
-                
-                <Typography variant="subtitle1" fontWeight="bold">Reported By</Typography>
+              {/* Sử dụng Grid để layout đẹp hơn */}
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="textSecondary">Report ID</Typography>
+                <Typography variant="body1" gutterBottom>{selectedReport.contentReportId}</Typography>
+
+                <Typography variant="body2" color="textSecondary">Reported By (User ID)</Typography>
                 <Typography variant="body1" gutterBottom>{selectedReport.userId}</Typography>
-                
-                <Typography variant="subtitle1" fontWeight="bold">Content Type</Typography>
+
+                <Typography variant="body2" color="textSecondary">Content Type</Typography>
+                {/* *** SỬ DỤNG HÀM ĐÃ SỬA *** */}
                 <Typography variant="body1" gutterBottom>{getContentTypeLabel(selectedReport.contentType)}</Typography>
-                
-                <Typography variant="subtitle1" fontWeight="bold">Content ID</Typography>
+
+                <Typography variant="body2" color="textSecondary">Content ID</Typography>
                 <Typography variant="body1" gutterBottom>{selectedReport.contentId}</Typography>
               </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle1" fontWeight="bold">Status</Typography>
-                <Chip
-                  label={getStatusInfo(selectedReport.status).label}
-                  color={getStatusInfo(selectedReport.status).color}
-                  sx={{ mb: 1 }}
-                />
-                
-                <Typography variant="subtitle1" fontWeight="bold">Created At</Typography>
-                <Typography variant="body1" gutterBottom>
-                  {new Date(selectedReport.createAt).toLocaleString()}
-                </Typography>
-                
-                <Typography variant="subtitle1" fontWeight="bold">Reason</Typography>
-                <Typography variant="body1" gutterBottom>{selectedReport.reason}</Typography>
+              <Grid item xs={12} sm={6}>
+                 <Typography variant="body2" color="textSecondary">Status</Typography>
+                 <Chip
+                   label={getStatusInfo(selectedReport.status).label}
+                   color={getStatusInfo(selectedReport.status).color}
+                   size="small" // Dùng size small cho nhất quán
+                   sx={{ mb: 1 }}
+                 />
+
+                 <Typography variant="body2" color="textSecondary">Created At</Typography>
+                 <Typography variant="body1" gutterBottom>
+                   {new Date(selectedReport.createAt).toLocaleString()}
+                 </Typography>
+
+                 <Typography variant="body2" color="textSecondary">Reason</Typography>
+                 <Typography variant="body1" gutterBottom sx={{ wordBreak: 'break-word' }}>{selectedReport.reason}</Typography>
+
               </Grid>
-              <Grid item xs={12}>
-                <Typography variant="subtitle1" fontWeight="bold">Description</Typography>
-                <Paper variant="outlined" sx={{ p: 2, mt: 1, bgcolor: '#f5f5f5' }}>
-                  <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                    {selectedReport.description}
-                  </Typography>
-                </Paper>
-              </Grid>
+              {/* Giả sử API getById trả về description */}
+              {selectedReport.description && (
+                  <Grid item xs={12}>
+                      <Typography variant="body2" color="textSecondary">Description</Typography>
+                      <Paper variant="outlined" sx={{ p: 1, mt: 0.5, bgcolor: 'grey.100' }}>
+                          <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                              {selectedReport.description}
+                          </Typography>
+                      </Paper>
+                  </Grid>
+              )}
             </Grid>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{p: 2}}> {/* Thêm padding cho actions */}
           {selectedReport && selectedReport.status === ReportStatus.PENDING && (
             <>
-              <Button 
-                variant="contained" 
+              <Button
+                variant="contained"
                 color="success"
                 startIcon={<ApproveIcon />}
-                onClick={() => handleUpdateReportStatus(selectedReport.reportId, ReportStatus.APPROVED)}
+                // Đổi tên reportId thành contentReportId
+                onClick={() => handleUpdateReportStatus(selectedReport.contentReportId, ReportStatus.APPROVED)}
                 disabled={processing}
               >
-                Approve
+                {processing ? <CircularProgress size={24} color="inherit" /> : 'Approve'}
               </Button>
-              <Button 
-                variant="contained" 
+              <Button
+                variant="contained"
                 color="error"
                 startIcon={<RejectIcon />}
-                onClick={() => handleUpdateReportStatus(selectedReport.reportId, ReportStatus.REJECTED)}
+                 // Đổi tên reportId thành contentReportId
+                onClick={() => handleUpdateReportStatus(selectedReport.contentReportId, ReportStatus.REJECTED)}
                 disabled={processing}
               >
-                Reject
+                 {processing ? <CircularProgress size={24} color="inherit" /> : 'Reject'}
               </Button>
+              <Box sx={{ flexGrow: 1 }} /> {/* Đẩy nút Close sang phải */}
             </>
           )}
-          <Button onClick={handleCloseReportDialog}>Close</Button>
+          <Button onClick={handleCloseReportDialog} variant="outlined">Close</Button>
         </DialogActions>
       </Dialog>
 
       {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={5000}
+        autoHideDuration={6000} // Tăng thời gian hiển thị một chút
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
+        {/* Snackbar có thể không tự đóng khi Alert có onClose */}
         <Alert
-          onClose={handleCloseSnackbar}
+          onClose={handleCloseSnackbar} // Cho phép đóng thủ công
           severity={snackbar.severity}
           variant="filled"
           sx={{ width: '100%' }}
@@ -592,4 +691,4 @@ const ContentReports = () => {
   );
 };
 
-export default ContentReports; 
+export default ContentReports;

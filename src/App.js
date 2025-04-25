@@ -44,8 +44,8 @@ function App() {
             <Route path="users" element={<Users />} />
             <Route path="users/:userId/flashcards" element={<UserFlashcards />} />
             <Route path="reports" element={<ContentReports />} />
-            <Route path="courses" element={<Courses />} />
-            <Route path="lessons" element={<Lessons />} />
+            <Route path="flashcardset" element={<Courses />} />
+            <Route path="multiplechoice" element={<Lessons />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
