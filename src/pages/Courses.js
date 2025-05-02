@@ -1,70 +1,60 @@
 import React, { useState, useEffect } from 'react';
-// *** THAY ĐỔI: Import đúng service ***
-import { flashCardService } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { flashCardService, authService } from '../services/api';
 import {
     Box,
     Typography,
     Grid,
     Card,
     CardContent,
-    // CardMedia, // Có thể giữ lại nếu API trả về ảnh
     CardActions,
     Button,
     Chip,
-    // Dialog, DialogTitle, DialogContent, DialogActions, // Tạm thời bỏ qua Add/Edit
     TextField,
-    // *** Thêm component cho filter ***
     FormControl,
     InputLabel,
     Select,
     MenuItem,
     IconButton,
-    // Rating, // Không dùng Rating
     InputAdornment,
-    // Divider, // Có thể dùng hoặc bỏ
-    // Fab, // Tạm thời bỏ qua Add/Edit
-    CircularProgress, // Thêm loading
-    Alert,          // Thêm error
-    Paper,          // Thêm cho khu vực filter
-    TablePagination, // Thêm pagination
-    Tooltip,         // Thêm tooltip
+    CircularProgress, 
+    Alert,
+    Paper,          
+    TablePagination, 
+    Tooltip,        
+    Snackbar,       
 } from '@mui/material';
 import {
-    // Add as AddIcon, // Tạm thời bỏ qua Add/Edit
     Edit as EditIcon,
     Delete as DeleteIcon,
     Search as SearchIcon,
     Language as LanguageIcon,
-    // AccessTime as AccessTimeIcon, // Thay bằng icon khác nếu cần
-    // Star as StarIcon, // Không dùng Rating
-    Visibility as VisibilityIcon, // Icon xem chi tiết/vocab
-    LibraryBooks as LibraryBooksIcon, // Icon cho số từ vựng
-    PeopleAlt as PeopleAltIcon,    // Icon cho số người học
-    CalendarToday as CalendarTodayIcon, // Icon ngày tạo
-    Info as InfoIcon, // Icon cho Level
-    Refresh as RefreshIcon, // Icon refresh
-    FilterList as FilterListIcon, // Icon filter
+    Visibility as VisibilityIcon, 
+    LibraryBooks as LibraryBooksIcon, 
+    PeopleAlt as PeopleAltIcon,   
+    CalendarToday as CalendarTodayIcon, 
+    Info as InfoIcon, 
+    Refresh as RefreshIcon, 
+    FilterList as FilterListIcon, 
 } from '@mui/icons-material';
-import { format } from 'date-fns'; // Import date-fns
-
+import { format } from 'date-fns'; 
 // Giả sử có danh sách ngôn ngữ
 const LANGUAGES = [
     { code: 'ENG', name: 'English' },
     { code: 'VIE', name: 'Vietnamese' },
     { code: 'FRA', name: 'French' },
     { code: 'ESP', name: 'Spanish' },
-    // Thêm các ngôn ngữ khác
 ];
 
 // Component đã được đổi tên
 const FlashcardSetsAdmin = () => {
-    // *** State quản lý dữ liệu từ API ***
+    const navigate = useNavigate();
     const [flashcardSets, setFlashcardSets] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [pagination, setPagination] = useState({
-        currentPage: 0, // MUI dùng 0-based
-        rowsPerPage: 12, // Số card trên trang
+        currentPage: 0, 
+        rowsPerPage: 12, 
         totalItems: 0,
         totalPages: 0,
     });
@@ -78,6 +68,28 @@ const FlashcardSetsAdmin = () => {
     // State cho filter đã áp dụng
     const [appliedFilters, setAppliedFilters] = useState({ ...filters });
     const [showFilters, setShowFilters] = useState(false);
+    
+    // State cho thông báo
+    const [snackbar, setSnackbar] = useState({
+        open: false,
+        message: '',
+        severity: 'info', 
+    });
+    
+    const [deleting, setDeleting] = useState(false);
+
+    const [canDelete, setCanDelete] = useState(false);
+    
+    // Kiểm tra quyền của người dùng khi component mount
+    useEffect(() => {
+        const checkDeletePermission = () => {
+            const isAdmin = authService.hasRole('Admin');
+            const isSuperAdmin = authService.hasRole('SuperAdmin');
+            setCanDelete(isAdmin || isSuperAdmin);
+        };
+        
+        checkDeletePermission();
+    }, []);
 
     // Hàm gọi API
     const fetchFlashcardSets = async (page, limit, currentAppliedFilters) => {
@@ -91,7 +103,6 @@ const FlashcardSetsAdmin = () => {
                 flashCardSetId: currentAppliedFilters.flashCardSetId || null,
                 learningLanguage: currentAppliedFilters.learningLanguage || null,
                 nativeLanguage: currentAppliedFilters.nativeLanguage || null,
-                // title: currentAppliedFilters.title || null, // Nếu API hỗ trợ search title
             };
 
             Object.keys(params).forEach(key => {
@@ -104,8 +115,7 @@ const FlashcardSetsAdmin = () => {
             const response = await flashCardService.getAllFlashcardSetsAdmin(params);
             console.log("API Response FlashcardSets:", response);
 
-            // *** API response không có trường cụ thể cho sets, giả sử nó là mảng gốc hoặc trong 1 key khác ***
-            // Kiểm tra cấu trúc response thực tế và điều chỉnh nếu cần
+            
             const setsData = response.flashcardSets || response.data || (Array.isArray(response) ? response : []) || [];
             setFlashcardSets(setsData);
 
@@ -128,7 +138,6 @@ const FlashcardSetsAdmin = () => {
         }
     };
 
-    // useEffect gọi API
     useEffect(() => {
         fetchFlashcardSets(pagination.currentPage, pagination.rowsPerPage, appliedFilters);
     }, [pagination.currentPage, pagination.rowsPerPage, appliedFilters]);
@@ -179,16 +188,74 @@ const FlashcardSetsAdmin = () => {
         console.log("Edit set:", setId);
     };
 
-    const handleDeleteSet = (setId) => {
+    // Đóng thông báo
+    const handleCloseSnackbar = () => {
+        setSnackbar(prev => ({ ...prev, open: false }));
+    };
+
+    // Xử lý xóa flashcard set
+    const handleDeleteSet = async (setId) => {
         console.log("Delete set:", setId);
-        if (window.confirm(`Are you sure you want to delete set ${setId.substring(0, 8)}...?`)) {
-            // Call delete API
+        const confirmMessage = `Bạn có chắc chắn muốn xóa bộ thẻ ${setId.substring(0, 8)}...? 
+        Thao tác này sẽ xóa vĩnh viễn bộ thẻ và tất cả từ vựng và đánh giá liên quan.`;
+        
+        if (window.confirm(confirmMessage)) {
+            try {
+                setDeleting(true);
+                const response = await flashCardService.deleteFlashcardSet(setId);
+                console.log("Delete response:", response);
+                
+                // Hiển thị thông báo thành công
+                setSnackbar({
+                    open: true,
+                    message: `Xóa bộ thẻ thành công. ID: ${setId.substring(0, 8)}...`,
+                    severity: 'success',
+                });
+                
+                // Cập nhật lại danh sách
+                fetchFlashcardSets(pagination.currentPage, pagination.rowsPerPage, appliedFilters);
+            } catch (err) {
+                console.error("Failed to delete flashcard set:", err);
+                let errorMessage = "Không thể xóa bộ thẻ.";
+                
+                if (err.response) {
+                    const { status } = err.response;
+                    const responseMessage = err.response.data?.message || "";
+                    
+                    if (status === 400) {
+                        if (responseMessage.includes("can not remove")) {
+                            errorMessage = "Không thể xóa bộ thẻ này. Có thể nó đang được sử dụng.";
+                        } else {
+                            errorMessage = responseMessage || "Yêu cầu không hợp lệ.";
+                        }
+                    } else if (status === 401) {
+                        errorMessage = "Bạn cần đăng nhập để thực hiện chức năng này.";
+                    } else if (status === 403) {
+                        errorMessage = "Bạn không có quyền xóa bộ thẻ này.";
+                    } else if (status === 404) {
+                        errorMessage = "Không tìm thấy bộ thẻ.";
+                    } else if (status === 500) {
+                        errorMessage = "Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.";
+                    } else {
+                        errorMessage = responseMessage || errorMessage;
+                    }
+                }
+                
+                // Hiển thị thông báo lỗi
+                setSnackbar({
+                    open: true,
+                    message: errorMessage,
+                    severity: 'error',
+                });
+            } finally {
+                setDeleting(false);
+            }
         }
     };
 
     const handleViewVocabularies = (setId) => {
         console.log("View vocabularies for set:", setId);
-        // Navigate to vocabulary page or open modal
+        navigate(`/flashcard-set/${setId}`);
     };
     // --- Kết thúc Handlers ---
 
@@ -353,7 +420,7 @@ const FlashcardSetsAdmin = () => {
                                                      Created: {set.createdAt ? format(new Date(set.createdAt), 'dd/MM/yyyy') : 'N/A'}
                                                  </Typography>
                                              </Box>
-                                             {/* Có thể thêm trạng thái Public/Private nếu API trả về */}
+                                            {/* Có thể thêm trạng thái Public/Private nếu API trả về */}
                                         </CardContent>
                                         <CardActions sx={{ mt: 'auto', borderTop: '1px solid #eee', p: 1 }}>
                                             {/* *** Cập nhật Actions *** */}
@@ -362,16 +429,23 @@ const FlashcardSetsAdmin = () => {
                                                      <VisibilityIcon fontSize="inherit" />
                                                  </IconButton>
                                              </Tooltip>
-                                            <Tooltip title="Edit Set">
+                                            {/* <Tooltip title="Edit Set">
                                                  <IconButton size="small" onClick={() => handleEditSet(set.flashcardSetId)} color="primary">
                                                      <EditIcon fontSize="inherit" />
                                                  </IconButton>
-                                             </Tooltip>
-                                            <Tooltip title="Delete Set">
-                                                 <IconButton size="small" onClick={() => handleDeleteSet(set.flashcardSetId)} color="error">
-                                                     <DeleteIcon fontSize="inherit"/>
-                                                 </IconButton>
-                                             </Tooltip>
+                                             </Tooltip> */}
+                                            {canDelete && (
+                                                <Tooltip title="Delete Set">
+                                                    <IconButton 
+                                                        size="small" 
+                                                        onClick={() => handleDeleteSet(set.flashcardSetId)} 
+                                                        color="error"
+                                                        disabled={deleting}
+                                                    >
+                                                        <DeleteIcon fontSize="inherit"/>
+                                                    </IconButton>
+                                                </Tooltip>
+                                            )}
                                         </CardActions>
                                     </Card>
                                 </Grid>
@@ -403,6 +477,38 @@ const FlashcardSetsAdmin = () => {
 
             {/* FAB Add (tạm thời bỏ) */}
             {/* <Fab color="primary" ... > <AddIcon /> </Fab> */}
+
+            {/* Snackbar để hiển thị thông báo sau khi xóa */}
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={6000}
+                onClose={handleCloseSnackbar}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
+
+            {/* Disable delete buttons & show spinner when deleting */}
+            {deleting && (
+                <Box
+                    sx={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                        zIndex: 1300,
+                    }}
+                >
+                    <CircularProgress />
+                </Box>
+            )}
         </Box>
     );
 };

@@ -37,6 +37,9 @@ import {
   Refresh as RefreshIcon,
   FilterList as FilterListIcon,
   Visibility as ViewIcon, // Thay FilterListIcon thành ViewIcon cho rõ nghĩa hơn
+  People as PeopleIcon,
+  AccountCircle as AccountCircleIcon,
+  Settings as SettingsIcon,
 } from '@mui/icons-material';
 import { userService } from '../services/api'; // Đảm bảo đường dẫn đúng
 
@@ -233,7 +236,7 @@ const Users = () => {
            ...(isEdit ? {} : { password: currentUser.password }), // Chỉ gửi password khi tạo mới
        };
 
-      if (isEdit) {
+    if (isEdit) {
         // Khi update, thường chỉ cần gửi những trường thay đổi, hoặc toàn bộ trừ password
         // API của bạn cần endpoint update (ví dụ: updateUser(userId, data))
         await userService.updateUser(currentUser.id, userData); // Giả sử có hàm này
@@ -248,7 +251,7 @@ const Users = () => {
            // await userService.registerAdmin(adminData); // Nếu có endpoint riêng
            await userService.createUser(adminData); // Nếu dùng endpoint chung
            message = 'Admin user created successfully';
-        } else {
+    } else {
             const createData = { ...userData, password: currentUser.password };
             await userService.createUser(createData); // Dùng endpoint chung
             message = 'User created successfully';
@@ -319,86 +322,327 @@ const Users = () => {
   };
 
   return (
-    <Box sx={{ p: 2 }}> {/* Thêm padding chung */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5" component="h1">Users Management</Typography>
+    <Box sx={{ p: 3 }}> {/* Tăng padding cho toàn bộ trang */}
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: { xs: 'column', sm: 'row' },
+        justifyContent: 'space-between', 
+        alignItems: { xs: 'flex-start', sm: 'center' },
+        mb: 4,
+        gap: 2
+      }}>
+    <Box>
+          <Typography 
+            variant="h4" 
+            component="h1" 
+            sx={{ 
+              fontWeight: 700, 
+              color: 'text.primary',
+              mb: 1
+            }}
+          >
+            Users Management
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Manage user accounts, roles and permissions
+          </Typography>
+        </Box>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
-          disabled={loading} // Disable nút khi đang loading
+          disabled={loading}
+          sx={{ 
+            px: 2,
+            py: 1,
+            boxShadow: 2,
+            borderRadius: 2,
+          }}
         >
-          Add User
+          Add New User
         </Button>
+      </Box>
+
+      {/* Cards hiển thị thông tin tổng quan */}
+      <Box sx={{ 
+        display: 'grid', 
+        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr 1fr' },
+        gap: 3,
+        mb: 4
+      }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            borderRadius: 3,
+            bgcolor: (theme) => theme.palette.primary.light,
+            color: 'white',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+          <Box sx={{ position: 'relative', zIndex: 1 }}>
+            <Typography variant="h6" fontWeight="600" gutterBottom>
+              Total Users
+            </Typography>
+            <Typography variant="h3" fontWeight="700">
+              {totalItems}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
+              {loading ? 'Loading...' : 'All registered accounts'}
+            </Typography>
+          </Box>
+          <Box sx={{ 
+            position: 'absolute',
+            right: -15,
+            bottom: -15,
+            opacity: 0.15,
+            fontSize: 100
+          }}>
+            <PeopleIcon fontSize="inherit" />
+          </Box>
+        </Paper>
+
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            borderRadius: 3,
+            bgcolor: (theme) => '#4caf50',
+            color: 'white',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+          <Box sx={{ position: 'relative', zIndex: 1 }}>
+            <Typography variant="h6" fontWeight="600" gutterBottom>
+              Regular Users
+            </Typography>
+            <Typography variant="h3" fontWeight="700">
+              {users.filter(user => !user.roles?.some(r => r === 'Admin' || r === 'SuperAdmin')).length}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
+              Standard account users
+            </Typography>
+          </Box>
+          <Box sx={{ 
+            position: 'absolute',
+            right: -15,
+            bottom: -15,
+            opacity: 0.15,
+            fontSize: 100
+          }}>
+            <AccountCircleIcon fontSize="inherit" />
+          </Box>
+        </Paper>
+
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            borderRadius: 3,
+            bgcolor: (theme) => '#ff9800',
+            color: 'white',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+          <Box sx={{ position: 'relative', zIndex: 1 }}>
+            <Typography variant="h6" fontWeight="600" gutterBottom>
+              Admin Users
+            </Typography>
+            <Typography variant="h3" fontWeight="700">
+              {users.filter(user => user.roles?.includes('Admin')).length}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
+              Users with admin privileges
+            </Typography>
+          </Box>
+          <Box sx={{ 
+            position: 'absolute',
+            right: -15,
+            bottom: -15,
+            opacity: 0.15,
+            fontSize: 100
+          }}>
+            <SettingsIcon fontSize="inherit" />
+          </Box>
+        </Paper>
+
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            borderRadius: 3,
+            bgcolor: (theme) => '#f44336',
+            color: 'white',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+          <Box sx={{ position: 'relative', zIndex: 1 }}>
+            <Typography variant="h6" fontWeight="600" gutterBottom>
+              SuperAdmins
+            </Typography>
+            <Typography variant="h3" fontWeight="700">
+              {users.filter(user => user.roles?.includes('SuperAdmin')).length}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
+              Full access system administrators
+            </Typography>
+          </Box>
+          <Box sx={{ 
+            position: 'absolute',
+            right: -15,
+            bottom: -15,
+            opacity: 0.15,
+            fontSize: 100
+          }}>
+            <FilterListIcon fontSize="inherit" />
+          </Box>
+        </Paper>
       </Box>
 
       {/* Thông báo lỗi tổng quát */}
       {error && !loading && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: 3,
+            borderRadius: 2,
+            boxShadow: 1
+          }} 
+          onClose={() => setError(null)}
+        >
           {error}
         </Alert>
       )}
 
       {/* Phần Filter */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Paper 
+        sx={{ 
+          p: 3, 
+          mb: 3,
+          borderRadius: 3,
+          boxShadow: 2,
+        }}
+      >
+        <Typography 
+          variant="h6" 
+          sx={{ 
+            mb: 2,
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1
+          }}
+        >
+          <FilterListIcon /> Filter Users
+        </Typography>
+        <Box sx={{ 
+          display: 'flex', 
+          gap: 2, 
+          alignItems: 'center', 
+          flexWrap: 'wrap',
+          justifyContent: 'space-between'
+        }}>
+          <Box sx={{ 
+            display: 'flex',
+            gap: 2,
+            flexGrow: 1,
+            flexWrap: { xs: 'wrap', md: 'nowrap' }
+          }}>
           <TextField
-            placeholder="Search by email..."
+              placeholder="Search by email..."
             variant="outlined"
             size="small"
-            name="email" // Thêm name
-            value={filters.email}
-            onChange={handleFilterChange}
-            onKeyPress={handleEmailKeyPress} // Xử lý Enter
+              name="email"
+              value={filters.email}
+              onChange={handleFilterChange}
+              onKeyPress={handleEmailKeyPress}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon fontSize="small"/>
+                    <SearchIcon fontSize="small"/>
                 </InputAdornment>
               ),
             }}
-            sx={{ flexGrow: 1, minWidth: '250px' }} // Cho phép co giãn
-          />
-          <FormControl variant="outlined" size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Role</InputLabel>
-            <Select
-              name="role" // Thêm name
-              value={filters.role}
-              onChange={handleFilterChange}
-              label="Role"
+              sx={{ 
+                flexGrow: 1, 
+                minWidth: { xs: '100%', md: '250px' },
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2
+                }
+              }}
+            />
+            <FormControl 
+              variant="outlined" 
+              size="small" 
+              sx={{ 
+                minWidth: { xs: '100%', md: '200px' },
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2
+                }
+              }}
             >
-              <MenuItem value="">
-                <em>All Roles</em>
-              </MenuItem>
-              <MenuItem value="User">User</MenuItem>
-              <MenuItem value="Admin">Admin</MenuItem>
-              <MenuItem value="SuperAdmin">SuperAdmin</MenuItem>
-              {/* Thêm các role khác nếu có */}
-            </Select>
-          </FormControl>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={handleApplyFilters} // Gọi hàm áp dụng filter
-            startIcon={<SearchIcon />}
-            disabled={loading}
-          >
-            Search
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleResetFilters}
-            startIcon={<RefreshIcon />}
-            disabled={loading}
-          >
-            Reset
-          </Button>
+              <InputLabel>Role</InputLabel>
+              <Select
+                name="role"
+                value={filters.role}
+                onChange={handleFilterChange}
+                label="Role"
+              >
+                <MenuItem value="">
+                  <em>All Roles</em>
+                </MenuItem>
+                <MenuItem value="User">User</MenuItem>
+                <MenuItem value="Admin">Admin</MenuItem>
+                <MenuItem value="SuperAdmin">SuperAdmin</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Box sx={{ 
+            display: 'flex', 
+            gap: 1,
+            flexWrap: 'nowrap'
+          }}>
+            <Button
+              variant="contained"
+              size="medium"
+              onClick={handleApplyFilters}
+              startIcon={<SearchIcon />}
+              disabled={loading}
+              sx={{ 
+                minWidth: '100px',
+                borderRadius: 2
+              }}
+            >
+              Search
+            </Button>
+            <Button
+              variant="outlined"
+              size="medium"
+              onClick={handleResetFilters}
+              startIcon={<RefreshIcon />}
+              disabled={loading}
+              sx={{ 
+                minWidth: '100px',
+                borderRadius: 2
+              }}
+            >
+              Reset
+            </Button>
+          </Box>
         </Box>
       </Paper>
 
       {/* Bảng dữ liệu */}
-      <Paper sx={{ width: '100%', overflow: 'hidden' }}> {/* Thêm overflow */}
+      <Paper sx={{ 
+        width: '100%', 
+        overflow: 'hidden',
+        borderRadius: 3,
+        boxShadow: 2,
+      }}>
         <TableContainer>
           <Table stickyHeader sx={{ minWidth: 750 }} aria-labelledby="tableTitle" size="small">
             <TableHead>
@@ -472,14 +716,14 @@ const Users = () => {
 
         {/* Chỉ hiển thị Pagination nếu có dữ liệu và không loading */}
         {totalItems > 0 && !loading && (
-          <TablePagination
+        <TablePagination
             rowsPerPageOptions={[5, 10, 20, 50]} // Điều chỉnh options nếu cần
-            component="div"
+          component="div"
             count={totalItems} // Sử dụng totalItems đã tính toán/lấy về
-            rowsPerPage={rowsPerPage}
+          rowsPerPage={rowsPerPage}
             page={currentPage} // Sử dụng currentPage (0-based index)
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
             // Thêm label để rõ ràng hơn, đặc biệt khi count là ước tính
              labelDisplayedRows={({ from, to, count }) =>
                  // Nếu count là tính toán từ totalPages, có thể ghi chú
@@ -497,25 +741,25 @@ const Users = () => {
           {/* Chỉ render form khi currentUser có giá trị */}
           {currentUser && (
             <Box component="form" noValidate autoComplete="off" sx={{ mt: 1 }}>
-              <TextField
-                fullWidth
-                margin="dense"
+            <TextField
+              fullWidth
+              margin="dense"
                 label="Username"
                 name="userName"
                 value={currentUser.userName}
                 onChange={handleDialogInputChange}
-                required
+              required
                 variant="outlined"
-              />
-              <TextField
-                fullWidth
-                margin="dense"
-                label="Email"
-                name="email"
-                type="email"
-                value={currentUser.email}
+            />
+            <TextField
+              fullWidth
+              margin="dense"
+              label="Email"
+              name="email"
+              type="email"
+              value={currentUser.email}
                 onChange={handleDialogInputChange}
-                required
+              required
                 variant="outlined"
                 // disabled={isEdit} // Có thể không cho sửa email
               />
@@ -536,7 +780,7 @@ const Users = () => {
               )}
                <FormControl fullWidth margin="dense" variant="outlined">
                  <InputLabel>Roles</InputLabel>
-                 <Select
+              <Select
                    multiple
                    name="roles"
                    value={currentUser.roles}
@@ -552,13 +796,13 @@ const Users = () => {
                  >
                    {/* Có thể lấy danh sách role từ API */}
                    <MenuItem value="User">User</MenuItem>
-                   <MenuItem value="Admin">Admin</MenuItem>
+                <MenuItem value="Admin">Admin</MenuItem>
                    <MenuItem value="SuperAdmin">SuperAdmin</MenuItem>
-                 </Select>
-               </FormControl>
+              </Select>
+            </FormControl>
               <FormControl fullWidth margin="dense" variant="outlined">
                 <InputLabel>Gender</InputLabel>
-                <Select
+              <Select
                   name="gender"
                   value={currentUser.gender}
                   label="Gender"
@@ -566,8 +810,8 @@ const Users = () => {
                 >
                   <MenuItem value={true}>Male</MenuItem>
                   <MenuItem value={false}>Female</MenuItem>
-                </Select>
-              </FormControl>
+              </Select>
+            </FormControl>
               <TextField
                 fullWidth
                 margin="dense"
@@ -579,7 +823,7 @@ const Users = () => {
                 InputProps={{ inputProps: { min: 0 } }}
                 variant="outlined"
               />
-            </Box>
+          </Box>
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}> {/* Thêm padding */}
@@ -615,4 +859,4 @@ const Users = () => {
   );
 };
 
-export default Users;
+export default Users; 

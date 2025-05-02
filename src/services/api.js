@@ -6,6 +6,8 @@ const API = axios.create({
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'ngrok-skip-browser-warning': 'true'
   }
 });
 
@@ -67,6 +69,42 @@ export const authService = {
   hasRole: (role) => {
     const user = authService.getCurrentUser();
     return user && user.roles && user.roles.includes(role);
+  },
+
+  // Check if user has admin rights (Admin or SuperAdmin)
+  hasAdminRole: () => {
+    try {
+      const token = authService.getToken();
+      if (!token) return false;
+      
+      // Parse the token
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      
+      const payload = JSON.parse(jsonPayload);
+      
+      // Check for role claims (handle different possible formats)
+      const roleClaim = payload.role || payload.roles || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
+      
+      if (!roleClaim) return false;
+      
+      // Handle roles as array or single string
+      const roles = Array.isArray(roleClaim) ? roleClaim : [roleClaim];
+      
+      // Check if roles include Admin or SuperAdmin
+      return roles.some(r => r === 'Admin' || r === 'SuperAdmin');
+    } catch (error) {
+      console.error('Error checking admin role:', error);
+      return false;
+    }
+  },
+
+  // Get token
+  getToken: () => {
+    return localStorage.getItem('token');
   }
 };
 
@@ -173,16 +211,37 @@ export const flashCardService = {
     }
   },
 
+  // Get details for a specific flashcard set by ID
+  getFlashcardSetDetails: async (flashcardSetId) => {
+    try {
+      const response = await API.get(`/api/FlashCardSet/${flashcardSetId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching flashcard set ${flashcardSetId}:`, error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  // Delete a flashcard set (Admin/SuperAdmin only)
+  deleteFlashcardSet: async (flashcardSetId) => {
+    try {
+      const response = await API.delete(`/FlashCardSet/Delete/${flashcardSetId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error deleting flashcard set ${flashcardSetId}:`, error.response?.data || error.message);
+      throw error;
+    }
+  },
+
   getAllFlashcardSetsAdmin: async (params = {}) => {
     const {
       flashCardSetId,
       learningLanguage,
       nativeLanguage,
-      page = 1,         // Giá trị mặc định từ API description
-      itemPerPage = 20, // Giá trị mặc định từ API description
+      page = 1,         
+      itemPerPage = 20, 
     } = params;
   
-    // Xây dựng các tham số query chỉ bao gồm những giá trị được cung cấp
     const queryParams = { page, itemPerPage };
     if (flashCardSetId) queryParams.flashCardSetId = flashCardSetId;
     if (learningLanguage) queryParams.learningLanguage = learningLanguage;
@@ -194,10 +253,10 @@ export const flashCardService = {
         params: queryParams
       });
       console.log("Response from GET /api/FlashCardSet/admin/GetAllAdmin:", response.data);
-      return response.data; // Trả về dữ liệu từ API
+      return response.data; 
     } catch (error) {
       console.error("Error fetching admin flashcard sets:", error.response?.data || error.message);
-      throw error; // Ném lỗi để component gọi có thể xử lý
+      throw error; 
     }
   }
 };
@@ -240,7 +299,7 @@ export const reportService = {
   // Update report status
   updateReportStatus: async (reportId, newStatus) => {
     try {
-      const response = await API.put(`/api/ContentReport/ApproveReport/${reportId}`, null, {
+      const response = await API.put(`/ContentReport/ApproveReport/${reportId}`, null, {
         params: { reportStatus: newStatus }
       });
       return response.data;
@@ -252,7 +311,7 @@ export const reportService = {
   // Get report details by ID
   getReportById: async (reportId) => {
     try {
-      const response = await API.get(`/api/ContentReport/${reportId}`);
+      const response = await API.get(`/ContentReport/${reportId}`);
       return response.data;
     } catch (error) {
       throw error;
@@ -269,8 +328,8 @@ export const multipleChoiceTestService = {
       multipleChoiceTestId,
       learningLanguage,
       nativeLanguage,
-      page = 1,         // Giá trị mặc định từ API description
-      itemPerPage = 20, // Giá trị mặc định từ API description
+      page = 1,         
+      itemPerPage = 20, 
     } = params;
 
     // Xây dựng các tham số query chỉ bao gồm những giá trị được cung cấp
@@ -285,16 +344,47 @@ export const multipleChoiceTestService = {
         params: queryParams
       });
       console.log("Response from GET /api/MultipleChoiceTest/admin/GetAllAdmin:", response.data);
-      return response.data; // Trả về dữ liệu từ API
+      return response.data; 
     } catch (error) {
       console.error("Error fetching admin multiple choice tests:", error.response?.data || error.message);
-      throw error; // Ném lỗi để component gọi có thể xử lý
+      throw error; 
+    }
+  },
+
+  // Get details for a specific multiple choice test
+  getMultipleChoiceTestDetails: async (testId) => {
+    try {
+      const response = await API.get(`/api/MultipleChoiceTest/${testId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching multiple choice test ${testId}:`, error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  // Delete a multiple choice test (Admin/SuperAdmin only)
+  deleteMultipleChoiceTest: async (testId) => {
+    try {
+      const response = await API.delete(`/MultipleChoiceTest/DeleteById/${testId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error deleting multiple choice test ${testId}:`, error.response?.data || error.message);
+      throw error;
     }
   }
-
-
 }
 
-
+export const statisticsService = {
+  // Get dashboard statistics (Admin/SuperAdmin only)
+  getSystemStatistics: async () => {
+    try {
+      const response = await API.get('/UserLearningStats/Statistics');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching system statistics:", error.response?.data || error.message);
+      throw error;
+    }
+  }
+};
 
 export default API; 

@@ -1,229 +1,352 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
+  Box,
+  Typography,
   Grid, 
   Paper, 
-  Typography, 
-  Box, 
   Card, 
   CardContent,
+  CardHeader,
   Divider,
   List,
   ListItem,
   ListItemText,
   ListItemAvatar,
   Avatar,
+  IconButton,
+  Button,
+  Tooltip,
+  CircularProgress,
+  LinearProgress,
+  useTheme,
+  alpha,
 } from '@mui/material';
 import { 
-  PeopleAlt, 
-  Book, 
-  School, 
-  TrendingUp, 
-  Person,
+  People as PeopleIcon,
+  Book as BookIcon,
+  School as SchoolIcon,
+  Flag as FlagIcon,
+  TrendingUp as TrendingUpIcon,
+  BarChart as BarChartIcon,
+  MoreVert as MoreVertIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement, Title, Filler } from 'chart.js';
-import { Doughnut, Line } from 'react-chartjs-2';
-
-// Register Chart.js components
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement, Title, Filler);
+import { statisticsService } from '../services/api';
+import '../components/styles/Dashboard.css';
 
 const Dashboard = () => {
-  // Dummy data for statistics
-  const statistics = [
-    { title: 'Total Users', value: '2,543', icon: <PeopleAlt />, color: '#1976d2' },
-    { title: 'Courses', value: '48', icon: <Book />, color: '#ff9800' },
-    { title: 'Lessons', value: '324', icon: <School />, color: '#4caf50' },
-    { title: 'Active Enrollments', value: '1,893', icon: <TrendingUp />, color: '#f44336' },
-  ];
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const theme = useTheme();
 
-  // Dummy data for the doughnut chart
-  const doughnutData = {
-    labels: ['Beginners', 'Intermediate', 'Advanced'],
-    datasets: [
-      {
-        data: [55, 30, 15],
-        backgroundColor: ['#4caf50', '#ff9800', '#f44336'],
-        borderWidth: 0,
-      },
-    ],
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        
+        const mockData = {
+          users: {
+            total: 1285,
+            active: 953,
+            new: 68,
+            trend: 12.3, 
+          },
+          flashcards: {
+            total: 5732,
+            publicSets: 2143,
+            privateSets: 3589,
+            trend: 8.7,
+          },
+          multipleChoice: {
+            total: 874,
+            completed: 5382,
+            avgScore: 76,
+            trend: -2.4,
+          },
+          reports: {
+            total: 43,
+            pending: 18,
+            resolved: 25,
+            trend: 15.6,
+          },
+          activity: [
+            { id: 1, user: 'john.doe@example.com', action: 'Completed a test', score: 92, time: '5 min ago' },
+            { id: 2, user: 'sarah.smith@example.com', action: 'Created flashcard set', count: 15, time: '10 min ago' },
+            { id: 3, user: 'mike.brown@example.com', action: 'Reported content', type: 'FlashcardSet', time: '25 min ago' },
+            { id: 4, user: 'alex.wilson@example.com', action: 'Completed a test', score: 68, time: '1 hour ago' },
+            { id: 5, user: 'emma.johnson@example.com', action: 'Created flashcard set', count: 32, time: '2 hours ago' },
+          ],
+          topFlashcards: [
+            { id: 1, title: 'Advanced English Vocabulary', views: 4523, favorites: 345 },
+            { id: 2, title: 'Spanish for Beginners', views: 3874, favorites: 298 },
+            { id: 3, title: 'Essential Japanese Phrases', views: 2956, favorites: 187 },
+            { id: 4, title: 'Medical Terminology', views: 2735, favorites: 156 },
+          ],
+          topTests: [
+            { id: 1, title: 'TOEFL Preparation', completions: 876, avgScore: 82 },
+            { id: 2, title: 'French Grammar Test', completions: 743, avgScore: 75 },
+            { id: 3, title: 'German Vocabulary Quiz', completions: 652, avgScore: 79 },
+            { id: 4, title: 'Business English Assessment', completions: 541, avgScore: 84 },
+          ]
+        };
+        
+        setStats(mockData);
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError('Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const StatCard = ({ title, value, subtitle, icon, trend, color }) => {
+    const IconComponent = icon;
+    const isPositiveTrend = trend > 0;
+    
+    return (
+      <Card className="stat-card">
+        <CardContent className="stat-card-content">
+          <Box className="stat-card-header">
+            <Typography variant="h6" color="text.secondary" fontWeight={500}>
+              {title}
+            </Typography>
+            <Avatar
+              className="stat-card-icon"
+              sx={{
+                bgcolor: alpha(color, 0.1),
+                color: color
+              }}
+            >
+              <IconComponent />
+            </Avatar>
+          </Box>
+          <Typography variant="h3" component="div" className="stat-card-value">
+            {value}
+          </Typography>
+          <Box className="stat-card-footer">
+            <Typography variant="body2" color="text.secondary">
+              {subtitle}
+            </Typography>
+            {trend !== undefined && (
+              <Box 
+                className="trend-indicator"
+                sx={{ 
+                  color: isPositiveTrend ? 'success.main' : 'error.main',
+                  bgcolor: isPositiveTrend ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.error.main, 0.1),
+                }}
+              >
+                {isPositiveTrend ? (
+                  <ArrowUpwardIcon fontSize="small" className="trend-indicator-icon" />
+                ) : (
+                  <ArrowDownwardIcon fontSize="small" className="trend-indicator-icon" />
+                )}
+                <Typography variant="body2" fontWeight={500}>
+                  {Math.abs(trend)}%
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </CardContent>
+      </Card>
+    );
   };
 
-  // Dummy data for the line chart
-  const lineData = {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-    datasets: [
-      {
-        label: 'User Registrations',
-        data: [65, 59, 80, 81, 56, 55],
-        fill: true,
-        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-        borderColor: 'rgba(75, 192, 192, 1)',
-        tension: 0.4,
-      },
-      {
-        label: 'Course Enrollments',
-        data: [28, 48, 40, 19, 86, 27],
-        fill: true,
-        backgroundColor: 'rgba(255, 159, 64, 0.2)',
-        borderColor: 'rgba(255, 159, 64, 1)',
-        tension: 0.4,
-      },
-    ],
+  const ActivityItem = ({ activity }) => {
+    let avatarBgColor = theme.palette.primary.main;
+    let avatarIcon = <TrendingUpIcon />;
+    
+    if (activity.action.includes('test')) {
+      avatarBgColor = theme.palette.info.main;
+      avatarIcon = <SchoolIcon />;
+    } else if (activity.action.includes('flashcard')) {
+      avatarBgColor = theme.palette.success.main;
+      avatarIcon = <BookIcon />;
+    } else if (activity.action.includes('Reported')) {
+      avatarBgColor = theme.palette.error.main;
+      avatarIcon = <FlagIcon />;
+    }
+    
+    return (
+      <ListItem className="activity-list-item">
+        <ListItemAvatar>
+          <Avatar className="activity-avatar" sx={{ bgcolor: avatarBgColor }}>{avatarIcon}</Avatar>
+        </ListItemAvatar>
+        <ListItemText
+          primary={activity.user}
+          secondary={
+            <Box component="span">
+              {activity.action}
+              {activity.score && ` - Score: ${activity.score}%`}
+              {activity.count && ` - ${activity.count} cards`}
+              {activity.type && ` - ${activity.type}`}
+            </Box>
+          }
+        />
+        <Typography variant="caption" color="text.secondary">
+          {activity.time}
+        </Typography>
+      </ListItem>
+    );
   };
+  
+  if (loading) {
+    return (
+      <Box className="loading-container">
+        <CircularProgress size={40} />
+      </Box>
+    );
+  }
 
-  // Chart options
-  const lineOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top',
-      },
-      title: {
-        display: true,
-        text: 'Monthly Growth',
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-      },
-    },
-  };
-
-  // Dummy data for recent activities
-  const recentActivities = [
-    { user: 'John Doe', action: 'enrolled in "Spanish for Beginners"', time: '10 minutes ago' },
-    { user: 'Sarah Smith', action: 'completed "French Vocabulary - Level 2"', time: '1 hour ago' },
-    { user: 'Michael Brown', action: 'joined the platform', time: '3 hours ago' },
-    { user: 'Emma Wilson', action: 'achieved 95% in "German Grammar Test"', time: '5 hours ago' },
-  ];
+  if (error) {
+    return (
+      <Box className="dashboard-summary">
+        <Typography variant="h6" color="error" align="center">
+          {error}
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+          <Button 
+            variant="outlined" 
+            color="primary" 
+            startIcon={<RefreshIcon />} 
+            onClick={() => window.location.reload()}
+          >
+            Try Again
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
-        Dashboard
-      </Typography>
-      <Typography variant="subtitle1" color="textSecondary" sx={{ mb: 3 }}>
-        Welcome to the WORDWISE Admin Dashboard
-      </Typography>
-
-      {/* Statistics Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {statistics.map((stat, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <Paper elevation={2} sx={{ p: 2, height: '100%' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Avatar sx={{ bgcolor: stat.color, width: 56, height: 56, mr: 2 }}>
-                  {stat.icon}
-                </Avatar>
-                <Box>
-                  <Typography variant="h6">{stat.value}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    {stat.title}
-                  </Typography>
-                </Box>
-              </Box>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Charts */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={8}>
-          <Paper elevation={2} sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Growth Overview
-            </Typography>
-            <Line data={lineData} options={lineOptions} />
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-            <Typography variant="h6" gutterBottom>
-              Student Levels
-            </Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'center', height: '240px' }}>
-              <Doughnut data={doughnutData} />
-            </Box>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* Recent Activities */}
+      <Box className="dashboard-summary">
+        <Typography variant="h4" className="dashboard-title">
+          Dashboard
+        </Typography>
+        <Typography variant="body1" className="dashboard-description">
+          Welcome to the WordWise Admin Dashboard. Here's an overview of your system.
+        </Typography>
+      </Box>
+      
       <Grid container spacing={3}>
+        {/* User Stats */}
+        <Grid item xs={12} sm={6} lg={3}>
+          <StatCard 
+            title="Total Users" 
+            value={stats.users.total} 
+            subtitle={`${stats.users.active} active users`}
+            icon={PeopleIcon}
+            trend={stats.users.trend}
+            color={theme.palette.primary.main}
+          />
+        </Grid>
+        
+        {/* Flashcard Stats */}
+        <Grid item xs={12} sm={6} lg={3}>
+          <StatCard 
+            title="Flashcard Sets" 
+            value={stats.flashcards.total} 
+            subtitle={`${stats.flashcards.publicSets} public sets`}
+            icon={BookIcon}
+            trend={stats.flashcards.trend}
+            color={theme.palette.success.main}
+          />
+        </Grid>
+        
+        {/* Multiple Choice Stats */}
+        <Grid item xs={12} sm={6} lg={3}>
+          <StatCard 
+            title="Multiple Choice Tests" 
+            value={stats.multipleChoice.total} 
+            subtitle={`Avg. Score: ${stats.multipleChoice.avgScore}%`}
+            icon={SchoolIcon}
+            trend={stats.multipleChoice.trend}
+            color={theme.palette.info.main}
+          />
+        </Grid>
+        
+        {/* Reports Stats */}
+        <Grid item xs={12} sm={6} lg={3}>
+          <StatCard 
+            title="Content Reports" 
+            value={stats.reports.total} 
+            subtitle={`${stats.reports.pending} pending reports`}
+            icon={FlagIcon}
+            trend={stats.reports.trend}
+            color={theme.palette.error.main}
+          />
+        </Grid>
+        
+        {/* Recent Activity List */}
         <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Recent Activities
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <List>
-                {recentActivities.map((activity, index) => (
-                  <React.Fragment key={index}>
-                    <ListItem alignItems="flex-start">
-                      <ListItemAvatar>
-                        <Avatar>
-                          <Person />
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={activity.user}
-                        secondary={
-                          <>
-                            <Typography component="span" variant="body2" color="textPrimary">
-                              {activity.action}
-                            </Typography>
-                            {` — ${activity.time}`}
-                          </>
-                        }
-                      />
-                    </ListItem>
-                    {index < recentActivities.length - 1 && <Divider variant="inset" component="li" />}
-                  </React.Fragment>
-                ))}
-              </List>
-            </CardContent>
+          <Card className="activity-list">
+            <Box className="activity-list-header">
+              <Typography variant="h6">Recent Activity</Typography>
+              <IconButton size="small">
+                <MoreVertIcon />
+              </IconButton>
+            </Box>
+            <Divider />
+            <List>
+              {stats.activity.map((activity) => (
+                <React.Fragment key={activity.id}>
+                  <ActivityItem activity={activity} />
+                  {activity.id !== stats.activity[stats.activity.length - 1].id && <Divider variant="inset" component="li" />}
+                </React.Fragment>
+              ))}
+            </List>
           </Card>
         </Grid>
+        
+        {/* Top Content */}
         <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Latest Courses
+          <Card className="chart-container">
+            <Box className="activity-list-header">
+              <Typography variant="h6">Top Content</Typography>
+              <Tooltip title="View detailed analytics">
+                <IconButton size="small">
+                  <BarChartIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            <Divider />
+            <Box sx={{ p: 2 }}>
+              <Typography variant="subtitle1" gutterBottom fontWeight={600}>
+                Most Popular Flashcard Sets
               </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <List>
-                {[
-                  { title: 'Mandarin Chinese for Beginners', students: 156, rating: 4.8 },
-                  { title: 'Business English', students: 89, rating: 4.6 },
-                  { title: 'Japanese Conversation Skills', students: 124, rating: 4.9 },
-                  { title: 'Spanish for Travelers', students: 75, rating: 4.7 },
-                ].map((course, index) => (
-                  <React.Fragment key={index}>
-                    <ListItem alignItems="flex-start">
-                      <ListItemAvatar>
-                        <Avatar sx={{ bgcolor: '#ff9800' }}>
-                          <Book />
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={course.title}
-                        secondary={
-                          <>
-                            <Typography component="span" variant="body2" color="textPrimary">
-                              {course.students} students
-                            </Typography>
-                            {` — Rating: ${course.rating}/5`}
-                          </>
-                        }
-                      />
-                    </ListItem>
-                    {index < 3 && <Divider variant="inset" component="li" />}
-                  </React.Fragment>
+              <List dense>
+                {stats.topFlashcards.map((item) => (
+                  <ListItem key={item.id} disablePadding sx={{ py: 1 }}>
+                    <ListItemText 
+                      primary={item.title} 
+                      secondary={`${item.views.toLocaleString()} views • ${item.favorites} favorites`} 
+                    />
+                  </ListItem>
                 ))}
               </List>
-            </CardContent>
+              
+              <Divider sx={{ my: 2 }} />
+              
+              <Typography variant="subtitle1" gutterBottom fontWeight={600}>
+                Top Multiple Choice Tests
+              </Typography>
+              <List dense>
+                {stats.topTests.map((item) => (
+                  <ListItem key={item.id} disablePadding sx={{ py: 1 }}>
+                    <ListItemText 
+                      primary={item.title} 
+                      secondary={`${item.completions} completions • ${item.avgScore}% avg. score`} 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
           </Card>
         </Grid>
       </Grid>

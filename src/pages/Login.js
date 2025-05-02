@@ -10,9 +10,22 @@ import {
   Avatar,
   Alert,
   CircularProgress,
+  InputAdornment,
+  IconButton,
+  useTheme,
+  alpha,
+  Link,
+  Divider,
 } from '@mui/material';
-import { LockOutlined } from '@mui/icons-material';
+import {
+  LockOutlined,
+  EmailOutlined,
+  VisibilityOutlined,
+  VisibilityOffOutlined,
+  LanguageOutlined,
+} from '@mui/icons-material';
 import { authService } from '../services/api';
+import '../components/styles/Login.css';
 
 function Login() {
   const [formData, setFormData] = useState({
@@ -21,12 +34,14 @@ function Login() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const theme = useTheme();
 
   // Check if user is already logged in
   useEffect(() => {
     if (authService.isAuthenticated()) {
-      navigate('/');
+      navigate('/admin');
     }
   }, [navigate]);
 
@@ -51,7 +66,7 @@ function Login() {
       const response = await authService.login(formData);
       
       // Redirect to dashboard on successful login
-      navigate('/');
+      navigate('/admin');
     } catch (err) {
       console.error('Login error:', err);
       
@@ -88,41 +103,56 @@ function Login() {
     }
   };
 
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
+
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100vh',
-        }}
-      >
+    <Container 
+      component="main" 
+      maxWidth="xs" 
+      className="login-container"
+    >
+      <Box className="login-container">
         <Paper
           elevation={3}
-          sx={{
-            padding: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            width: '100%',
-          }}
+          className="login-paper"
         >
-          <Avatar sx={{ m: 1, bgcolor: 'primary.main' }}>
-            <LockOutlined />
+          <Avatar 
+            className="login-avatar"
+            sx={{ bgcolor: theme.palette.primary.main }}
+          >
+            <LockOutlined fontSize="large" />
           </Avatar>
-          <Typography component="h1" variant="h5" sx={{ mb: 3 }}>
-            WORDWISE Admin Login
+          <Typography 
+            component="h1" 
+            variant="h4" 
+            className="login-title login-gradient-text"
+          >
+            WORDWISE
+          </Typography>
+          <Typography 
+            variant="h6" 
+            color="textSecondary" 
+            className="login-subtitle"
+          >
+            Admin Panel Login
           </Typography>
           
           {error && (
-            <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+            <Alert 
+              severity="error" 
+              className="login-alert"
+            >
               {error}
             </Alert>
           )}
           
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
+          <Box 
+            component="form" 
+            onSubmit={handleSubmit} 
+            className="login-form"
+          >
             <TextField
               margin="normal"
               required
@@ -134,7 +164,14 @@ function Login() {
               autoFocus
               value={formData.email}
               onChange={handleChange}
-              disabled={loading}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <EmailOutlined />
+                  </InputAdornment>
+                ),
+              }}
+              className="login-textfield"
             />
             <TextField
               margin="normal"
@@ -142,26 +179,52 @@ function Login() {
               fullWidth
               name="password"
               label="Password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               id="password"
               autoComplete="current-password"
               value={formData.password}
               onChange={handleChange}
-              disabled={loading}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockOutlined />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={togglePasswordVisibility}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOffOutlined /> : <VisibilityOutlined />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              className="login-textfield"
             />
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              sx={{ mt: 3, mb: 2 }}
+              color="primary"
               disabled={loading}
+              className="login-button"
             >
               {loading ? <CircularProgress size={24} /> : 'Sign In'}
             </Button>
+            
+            <Divider className="login-divider">or</Divider>
+            
+            <Typography 
+              variant="body2" 
+              color="textSecondary" 
+              className="login-bottom-text"
+            >
+              Forgot your password? Contact administrator for assistance.
+            </Typography>
           </Box>
-          <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 2 }}>
-            For demo: Email: admin@wordwise.com / Password: admin123
-          </Typography>
         </Paper>
       </Box>
     </Container>

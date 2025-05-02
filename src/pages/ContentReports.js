@@ -16,6 +16,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   FormControl,
   InputLabel,
@@ -40,8 +41,10 @@ import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
   FilterList as FilterListIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
-import { reportService, userService } from '../services/api';
+import { reportService, userService, flashCardService, multipleChoiceTestService } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 
 // --- BỎ ENUM SỐ NÀY ĐI HOẶC CẬP NHẬT NẾU MUỐN DÙNG STRING ---
 // const ContentTypeReport = {
@@ -94,6 +97,7 @@ const getStatusInfo = (status) => {
 };
 
 const ContentReports = () => {
+  const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -121,6 +125,18 @@ const ContentReports = () => {
 
   // Open filters
   const [openFilters, setOpenFilters] = useState(false);
+
+  // Confirmation dialog states
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    content: '',
+    action: null,
+    reportId: null,
+    status: null,
+    contentId: null,
+    contentType: null
+  });
 
   const fetchReports = async () => {
     try {
@@ -234,53 +250,135 @@ const ContentReports = () => {
     setSelectedReport(null);
   };
 
-  const handleUpdateReportStatus = async (reportId, newStatus) => {
+  const openConfirmationDialog = (reportId, status, contentId, contentType) => {
+    let title = '';
+    let content = '';
+    const contentTypeLabel = getContentTypeLabel(contentType);
+    
+    if (status === ReportStatus.APPROVED) {
+      title = 'Xác nhận phê duyệt báo cáo';
+      content = `Vui lòng check kỹ bài ${contentTypeLabel}. Bạn có chắc muốn xoá ${contentTypeLabel} này không?`;
+    } else if (status === ReportStatus.REJECTED) {
+      title = 'Xác nhận từ chối báo cáo';
+      content = 'Bạn có chắc chắn muốn từ chối báo cáo này không?';
+    }
+
+    setConfirmDialog({
+      open: true,
+      title,
+      content,
+      reportId,
+      status,
+      contentId,
+      contentType
+    });
+  };
+
+  const handleCloseConfirmDialog = () => {
+    setConfirmDialog({
+      ...confirmDialog,
+      open: false
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const { reportId, status, contentId, contentType } = confirmDialog;
+    
     try {
       setProcessing(true);
-      // API updateReportStatus có thể trả về message hoặc report đã update
-      const responseMessage = await reportService.updateReportStatus(reportId, newStatus);
+      // First, update the report status
+      const responseMessage = await reportService.updateReportStatus(reportId, status);
 
       // Cập nhật trạng thái trong bảng (optimistic update)
       setReports((prevReports) =>
         prevReports.map((report) =>
-          report.contentReportId === reportId ? { ...report, status: newStatus } : report
+          report.contentReportId === reportId ? { ...report, status } : report
         )
       );
 
       // Cập nhật trạng thái trong dialog nếu đang mở
       if (selectedReport && selectedReport.contentReportId === reportId) {
-        setSelectedReport((prev) => ({ ...prev, status: newStatus }));
+        setSelectedReport((prev) => ({ ...prev, status }));
       }
 
-      setSnackbar({
-        open: true,
-        message: responseMessage || 'Report status updated successfully.',
-        severity: 'success',
-      });
+      // If approved, handle content deletion based on type
+      if (status === ReportStatus.APPROVED) {
+        try {
+          if (contentType === 'FlashcardSet') {
+            await flashCardService.deleteFlashcardSet(contentId);
+            setSnackbar({
+              open: true,
+              message: 'Báo cáo đã được phê duyệt và Flashcard Set đã bị xóa.',
+              severity: 'success',
+            });
+          } else if (contentType === 'MultipleChoice') {
+            await multipleChoiceTestService.deleteMultipleChoiceTest(contentId);
+            setSnackbar({
+              open: true,
+              message: 'Báo cáo đã được phê duyệt và bài trắc nghiệm đã bị xóa.',
+              severity: 'success',
+            });
+          } else {
+            setSnackbar({
+              open: true,
+              message: `Báo cáo đã được phê duyệt. Loại nội dung ${contentType} không có xử lý xóa tự động.`,
+              severity: 'info',
+            });
+          }
+        } catch (deleteErr) {
+          console.error('Error deleting content:', deleteErr);
+          setSnackbar({
+            open: true,
+            message: `Báo cáo đã được phê duyệt nhưng không thể xóa nội dung: ${deleteErr.message}`,
+            severity: 'warning',
+          });
+        }
+      } else {
+        // Just show success message for rejection
+        setSnackbar({
+          open: true,
+          message: 'Báo cáo đã được từ chối thành công.',
+          severity: 'success',
+        });
+      }
 
-      // Đóng dialog sau khi cập nhật thành công (nếu đang mở)
-      // if (openReportDialog) {
-      //   handleCloseReportDialog(); // Có thể giữ dialog mở để xem kết quả
-      // }
-
-      // Có thể fetch lại để đảm bảo dữ liệu đồng bộ hoàn toàn, nhưng optimistic update thường đủ
-      // fetchReports();
+      // Close the confirmation dialog
+      handleCloseConfirmDialog();
     } catch (err) {
       console.error('Error updating report status:', err);
       let errorMessage;
       if (err.response) {
-           errorMessage = err.response.data?.message || err.response.data || `Error ${err.response.status}: Failed to update status.`;
-       } else {
-           errorMessage = err.message || 'Network error. Please try again.';
-       }
+        errorMessage = err.response.data?.message || err.response.data || `Error ${err.response.status}: Failed to update status.`;
+      } else {
+        errorMessage = err.message || 'Network error. Please try again.';
+      }
       setSnackbar({
         open: true,
         message: errorMessage,
         severity: 'error',
       });
-      // Không cần setError ở đây vì đã có snackbar
+      handleCloseConfirmDialog();
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleUpdateReportStatus = (reportId, newStatus) => {
+    // Find the report to get its content ID and type
+    const reportToUpdate = reports.find(report => report.contentReportId === reportId);
+    if (reportToUpdate) {
+      openConfirmationDialog(
+        reportId, 
+        newStatus, 
+        reportToUpdate.contentId, 
+        reportToUpdate.contentType
+      );
+    } else {
+      setSnackbar({
+        open: true,
+        message: 'Không thể tìm thấy thông tin báo cáo',
+        severity: 'error',
+      });
     }
   };
 
@@ -359,9 +457,9 @@ const ContentReports = () => {
                   {/* *** SỬA VALUE CHO KHỚP VỚI STRING API *** */}
                   <MenuItem value="">All Types</MenuItem>
                   <MenuItem value="FlashcardSet">Flashcard Set</MenuItem>
-                  <MenuItem value="Flashcard">Flashcard</MenuItem>
+                  {/* <MenuItem value="Flashcard">Flashcard</MenuItem> */}
                   <MenuItem value="Lesson">Lesson</MenuItem>
-                  <MenuItem value="Comment">Comment</MenuItem>
+                  {/* <MenuItem value="Comment">Comment</MenuItem> */}
                   <MenuItem value="MultipleChoice">Multiple Choice</MenuItem>
                   {/* Thêm các loại khác nếu có */}
                 </Select>
@@ -520,22 +618,20 @@ const ContentReports = () => {
                       </Tooltip>
                       {report.status === ReportStatus.PENDING && (
                         <>
-                          <Tooltip title="Approve">
+                          <Tooltip title="Phê duyệt (Xóa nội dung)">
                             <IconButton
                               size="small"
                               color="success"
-                              // Đổi tên reportId thành contentReportId
                               onClick={() => handleUpdateReportStatus(report.contentReportId, ReportStatus.APPROVED)}
                               disabled={processing}
                             >
                               <ApproveIcon fontSize="small"/>
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Reject">
+                          <Tooltip title="Từ chối báo cáo">
                             <IconButton
                               size="small"
                               color="error"
-                              // Đổi tên reportId thành contentReportId
                               onClick={() => handleUpdateReportStatus(report.contentReportId, ReportStatus.REJECTED)}
                               disabled={processing}
                             >
@@ -647,26 +743,77 @@ const ContentReports = () => {
                 variant="contained"
                 color="success"
                 startIcon={<ApproveIcon />}
-                // Đổi tên reportId thành contentReportId
                 onClick={() => handleUpdateReportStatus(selectedReport.contentReportId, ReportStatus.APPROVED)}
                 disabled={processing}
               >
-                {processing ? <CircularProgress size={24} color="inherit" /> : 'Approve'}
+                {processing ? <CircularProgress size={24} color="inherit" /> : 'Phê duyệt (Xóa)'}
               </Button>
               <Button
                 variant="contained"
                 color="error"
                 startIcon={<RejectIcon />}
-                 // Đổi tên reportId thành contentReportId
                 onClick={() => handleUpdateReportStatus(selectedReport.contentReportId, ReportStatus.REJECTED)}
                 disabled={processing}
               >
-                 {processing ? <CircularProgress size={24} color="inherit" /> : 'Reject'}
+                 {processing ? <CircularProgress size={24} color="inherit" /> : 'Từ chối'}
               </Button>
               <Box sx={{ flexGrow: 1 }} /> {/* Đẩy nút Close sang phải */}
             </>
           )}
-          <Button onClick={handleCloseReportDialog} variant="outlined">Close</Button>
+          <Button onClick={handleCloseReportDialog} variant="outlined">Đóng</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={confirmDialog.open}
+        onClose={handleCloseConfirmDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{confirmDialog.title}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {confirmDialog.content}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseConfirmDialog} color="primary" variant="outlined">
+            Hủy
+          </Button>
+          {confirmDialog.status === ReportStatus.APPROVED && (
+            <Button 
+              onClick={() => {
+                // Logic to view content based on type
+                if (confirmDialog.contentType === 'FlashcardSet') {
+                  // Navigate to flashcard set detail with ID
+                  window.open(`/flashcard-sets/${confirmDialog.contentId}`, '_blank');
+                } else if (confirmDialog.contentType === 'MultipleChoice') {
+                  // Navigate to multiple choice test detail with ID
+                  window.open(`/multiple-choice/${confirmDialog.contentId}`, '_blank');
+                } else {
+                  setSnackbar({
+                    open: true,
+                    message: `Không thể xem trước nội dung loại ${getContentTypeLabel(confirmDialog.contentType)}`,
+                    severity: 'info',
+                  });
+                }
+              }}
+              color="info"
+              variant="outlined"
+            >
+              Xem nội dung
+            </Button>
+          )}
+          <Button 
+            onClick={handleConfirmAction} 
+            color={confirmDialog.status === ReportStatus.APPROVED ? "success" : "error"}
+            variant="contained"
+            disabled={processing}
+            startIcon={processing ? <CircularProgress size={20} /> : null}
+          >
+            {confirmDialog.status === ReportStatus.APPROVED ? "Xác nhận xóa" : "Xác nhận từ chối"}
+          </Button>
         </DialogActions>
       </Dialog>
 

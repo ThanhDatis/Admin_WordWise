@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { multipleChoiceTestService } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { multipleChoiceTestService, authService } from '../services/api';
 import {
     Box,
     Typography,
@@ -20,11 +21,11 @@ import {
     InputAdornment,
     CircularProgress,
     Alert,
-    // *** Thêm các component cần thiết cho Filter ***
     FormControl,
     InputLabel,
     Select,
     MenuItem,
+    Snackbar, 
 } from '@mui/material';
 import {
     Edit as EditIcon,
@@ -37,7 +38,8 @@ import {
     CalendarToday as CalendarTodayIcon,
     Info as InfoIcon,
     Refresh as RefreshIcon,
-    FilterList as FilterListIcon, // Icon cho nút filter
+    FilterList as FilterListIcon, 
+    Visibility as VisibilityIcon, 
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 
@@ -48,10 +50,10 @@ const LANGUAGES = [
     { code: 'FRA', name: 'French' },
     { code: 'ESP', name: 'Spanish' },
     { code: 'GER', name: 'German' },
-    // Thêm các ngôn ngữ khác
 ];
 
 const MultipleChoiceTestsAdmin = () => {
+    const navigate = useNavigate();
     const [tests, setTests] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -64,13 +66,35 @@ const MultipleChoiceTestsAdmin = () => {
     // *** State quản lý các giá trị filter hiện tại trên UI ***
     const [filters, setFilters] = useState({
         multipleChoiceTestId: '',
-        title: '', // Giữ lại search theo title nếu cần
+        title: '', 
         learningLanguage: '',
         nativeLanguage: '',
     });
     // *** State quản lý các filter đã được áp dụng để gọi API ***
     const [appliedFilters, setAppliedFilters] = useState({ ...filters });
-    const [showFilters, setShowFilters] = useState(false); // State để ẩn/hiện bộ lọc
+    const [showFilters, setShowFilters] = useState(false); 
+    
+    // State cho thông báo
+    const [snackbar, setSnackbar] = useState({
+        open: false,
+        message: '',
+        severity: 'info', 
+    });
+    
+    // State cho xóa và quyền xóa
+    const [deleting, setDeleting] = useState(false);
+    const [canDelete, setCanDelete] = useState(false);
+    
+    // Kiểm tra quyền của người dùng khi component mount
+    useEffect(() => {
+        const checkDeletePermission = () => {
+            const isAdmin = authService.hasRole('Admin');
+            const isSuperAdmin = authService.hasRole('SuperAdmin');
+            setCanDelete(isAdmin || isSuperAdmin);
+        };
+        
+        checkDeletePermission();
+    }, []);
 
     // Hàm gọi API với các filter đã áp dụng
     const fetchTests = async (page, limit, currentAppliedFilters) => {
@@ -81,22 +105,18 @@ const MultipleChoiceTestsAdmin = () => {
             const params = {
                 page: apiPage,
                 itemPerPage: limit,
-                // *** Chỉ gửi filter nếu có giá trị ***
                 multipleChoiceTestId: currentAppliedFilters.multipleChoiceTestId || null,
                 learningLanguage: currentAppliedFilters.learningLanguage || null,
                 nativeLanguage: currentAppliedFilters.nativeLanguage || null,
-                // title: currentAppliedFilters.title || null, // Bật nếu API hỗ trợ search title
             };
 
-            // Loại bỏ các key có giá trị null trước khi gửi
             Object.keys(params).forEach(key => {
                 if (params[key] === null || params[key] === '') {
                     delete params[key];
                 }
             });
 
-
-            console.log("Calling API with params:", params); // Debug
+            console.log("Calling API with params:", params); 
             const response = await multipleChoiceTestService.getAllMultipleChoiceTestsAdmin(params);
             console.log("API Response Tests:", response);
 
@@ -123,9 +143,14 @@ const MultipleChoiceTestsAdmin = () => {
     // useEffect gọi API khi phân trang hoặc *filter đã áp dụng* thay đổi
     useEffect(() => {
         fetchTests(pagination.currentPage, pagination.rowsPerPage, appliedFilters);
-    }, [pagination.currentPage, pagination.rowsPerPage, appliedFilters]); // Thêm appliedFilters
+    }, [pagination.currentPage, pagination.rowsPerPage, appliedFilters]); 
 
     // --- Handler Functions ---
+    // Đóng thông báo
+    const handleCloseSnackbar = () => {
+        setSnackbar(prev => ({ ...prev, open: false }));
+    };
+
     const handleChangePage = (event, newPage) => {
         setPagination(prev => ({ ...prev, currentPage: newPage }));
     };
@@ -147,61 +172,118 @@ const MultipleChoiceTestsAdmin = () => {
 
     // Áp dụng bộ lọc hiện tại
     const handleApplyFilters = () => {
-        setPagination(prev => ({ ...prev, currentPage: 0 })); // Reset về trang 0
-        setAppliedFilters(filters); // Cập nhật bộ lọc đã áp dụng -> trigger useEffect
+        setPagination(prev => ({ ...prev, currentPage: 0 })); 
+        setAppliedFilters(filters); 
     };
 
-     // Reset bộ lọc và fetch lại
-     const handleResetFilters = () => {
-         const initialFilters = {
-             multipleChoiceTestId: '',
-             title: '',
-             learningLanguage: '',
-             nativeLanguage: '',
-         };
-         setFilters(initialFilters);
-         setPagination(prev => ({ ...prev, currentPage: 0 }));
-         setAppliedFilters(initialFilters); // Áp dụng bộ lọc rỗng -> trigger useEffect
-         setShowFilters(false); // Có thể ẩn bộ lọc sau khi reset
-     };
-
+    // Reset bộ lọc và fetch lại
+    const handleResetFilters = () => {
+        const initialFilters = {
+            multipleChoiceTestId: '',
+            title: '',
+            learningLanguage: '',
+            nativeLanguage: '',
+        };
+        setFilters(initialFilters);
+        setPagination(prev => ({ ...prev, currentPage: 0 }));
+        setAppliedFilters(initialFilters); 
+        setShowFilters(false); 
+    };
 
     const handleRefresh = () => {
-         // Fetch lại với trang và bộ lọc hiện tại
-         fetchTests(pagination.currentPage, pagination.rowsPerPage, appliedFilters);
+        fetchTests(pagination.currentPage, pagination.rowsPerPage, appliedFilters);
     };
 
     const handleEditTest = (test) => {
         console.log("Edit test:", test);
     };
 
-    const handleDeleteTest = (testId) => {
+    // Xử lý xóa bài kiểm tra trắc nghiệm
+    const handleDeleteTest = async (testId) => {
         console.log("Delete test:", testId);
-        if (window.confirm(`Are you sure you want to delete test ${testId.substring(0, 8)}...?`)) {
-            // Call API delete
+        const confirmMessage = `Bạn có chắc chắn muốn xóa bài kiểm tra ${testId.substring(0, 8)}...? 
+        Thao tác này sẽ xóa vĩnh viễn bài kiểm tra và tất cả câu hỏi liên quan.`;
+        
+        if (window.confirm(confirmMessage)) {
+            try {
+                setDeleting(true);
+                // Gọi API xóa
+                const response = await multipleChoiceTestService.deleteMultipleChoiceTest(testId);
+                console.log("Delete response:", response);
+                
+                setSnackbar({
+                    open: true,
+                    message: `Xóa bài kiểm tra thành công. ID: ${testId.substring(0, 8)}...`,
+                    severity: 'success',
+                });
+                
+                fetchTests(pagination.currentPage, pagination.rowsPerPage, appliedFilters);
+            } catch (err) {
+                console.error("Failed to delete test:", err);
+                let errorMessage = "Không thể xóa bài kiểm tra.";
+                
+                if (err.response) {
+                    const { status } = err.response;
+                    const responseMessage = err.response.data?.message || "";
+                    
+                    if (status === 400) {
+                        if (responseMessage.includes("can not remove")) {
+                            errorMessage = "Không thể xóa bài kiểm tra này. Có thể nó đang được sử dụng.";
+                        } else {
+                            errorMessage = responseMessage || "Yêu cầu không hợp lệ.";
+                        }
+                    } else if (status === 401) {
+                        errorMessage = "Bạn cần đăng nhập để thực hiện chức năng này.";
+                    } else if (status === 403) {
+                        errorMessage = "Bạn không có quyền xóa bài kiểm tra này.";
+                    } else if (status === 404) {
+                        errorMessage = "Không tìm thấy bài kiểm tra.";
+                    } else if (status === 500) {
+                        errorMessage = "Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.";
+                    } else {
+                        errorMessage = responseMessage || errorMessage;
+                    }
+                }
+                
+                // Hiển thị thông báo lỗi
+                setSnackbar({
+                    open: true,
+                    message: errorMessage,
+                    severity: 'error',
+                });
+            } finally {
+                setDeleting(false);
+            }
         }
     };
+
+    // Thêm hàm để xử lý sự kiện khi nhấp vào icon mắt
+    const handleViewTest = (testId) => {
+        console.log("View test:", testId);
+        navigate(`/reading/test/${testId}`);
+    };
+
     // --- Kết thúc Handlers ---
 
     return (
         <Box sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h5" component="h1">Multiple Choice Test Management</Typography>
-                 <Box sx={{ display: 'flex', gap: 1 }}>
+                <Box sx={{ display: 'flex', gap: 1 }}>
                     <Tooltip title="Refresh Data">
                         <IconButton onClick={handleRefresh} disabled={loading}>
                             <RefreshIcon />
                         </IconButton>
                     </Tooltip>
                     <Button
-                         variant={showFilters ? "contained" : "outlined"}
-                         startIcon={<FilterListIcon />}
-                         onClick={() => setShowFilters(!showFilters)}
-                     >
-                         Filters
-                     </Button>
-                     {/* <Button variant="contained" startIcon={<AddIcon />} disabled> Add Test </Button> */}
-                 </Box>
+                        variant={showFilters ? "contained" : "outlined"}
+                        startIcon={<FilterListIcon />}
+                        onClick={() => setShowFilters(!showFilters)}
+                    >
+                        Filters
+                    </Button>
+                    {/* <Button variant="contained" startIcon={<AddIcon />} disabled> Add Test </Button> */}
+                </Box>
             </Box>
 
             {/* Khu vực Filter (có thể ẩn/hiện) */}
@@ -211,7 +293,7 @@ const MultipleChoiceTestsAdmin = () => {
                         <Grid item xs={12} sm={8} md={6}>
                             <TextField
                                 label="Filter by Test ID"
-                                name="multipleChoiceTestId" // Cập nhật name
+                                name="multipleChoiceTestId" 
                                 variant="outlined"
                                 size="small"
                                 fullWidth
@@ -228,7 +310,7 @@ const MultipleChoiceTestsAdmin = () => {
                                   value={filters.learningLanguage}
                                   label="Learning Language"
                                   onChange={handleFilterChange}
-                                  style={{ minWidth: '250px' }} // Điều chỉnh độ rộng tối thiểu
+                                  style={{ minWidth: '250px' }} 
                               >
                                   <MenuItem value="">
                                       <em>All</em>
@@ -251,7 +333,7 @@ const MultipleChoiceTestsAdmin = () => {
                                   value={filters.nativeLanguage}
                                   label="Native Language"
                                   onChange={handleFilterChange}
-                                  style={{ minWidth: '250px' }} // Điều chỉnh độ rộng tối thiểu
+                                  style={{ minWidth: '250px' }}
                               >
                                   <MenuItem value="">
                                       <em>All</em>
@@ -265,33 +347,32 @@ const MultipleChoiceTestsAdmin = () => {
                           </FormControl>
                         </Grid>
 
-                         {/* Nút Apply và Reset */}
-                         <Grid item xs={12} sm={6} md={4} sx={{ display: 'flex', gap: 1 }}>
-                             <Button
-                                 variant="contained"
-                                 onClick={handleApplyFilters}
-                                 startIcon={<SearchIcon />}
-                                 disabled={loading}
-                                 fullWidth
-                             >
-                                 Apply Filters
-                             </Button>
-                             <Button
-                                 variant="outlined"
-                                 onClick={handleResetFilters}
-                                 disabled={loading}
-                                 fullWidth
-                             >
-                                 Reset
-                             </Button>
-                         </Grid>
+                        {/* Nút Apply và Reset */}
+                        <Grid item xs={12} sm={6} md={4} sx={{ display: 'flex', gap: 1 }}>
+                            <Button
+                                variant="contained"
+                                onClick={handleApplyFilters}
+                                startIcon={<SearchIcon />}
+                                disabled={loading}
+                                fullWidth
+                            >
+                                Apply Filters
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                onClick={handleResetFilters}
+                                disabled={loading}
+                                fullWidth
+                            >
+                                Reset
+                            </Button>
+                        </Grid>
                     </Grid>
                 </Paper>
             )}
 
-
-             {/* Thông báo lỗi */}
-             {error && !loading && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            {/* Thông báo lỗi */}
+            {error && !loading && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
             {/* Bảng dữ liệu */}
             <Paper sx={{ width: '100%', overflow: 'hidden' }}>
@@ -321,7 +402,7 @@ const MultipleChoiceTestsAdmin = () => {
                                     <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                                         {/* Hiển thị thông báo phù hợp */}
                                         <Typography>
-                                            {Object.values(appliedFilters).some(v => v) // Kiểm tra xem có filter nào được áp dụng không
+                                            {Object.values(appliedFilters).some(v => v) 
                                                 ? "No tests found matching your filters."
                                                 : "No multiple choice tests found."}
                                         </Typography>
@@ -331,13 +412,13 @@ const MultipleChoiceTestsAdmin = () => {
                                 tests.map((test) => (
                                     <TableRow hover key={test.multipleChoiceTestId}>
                                         <TableCell>
-                                             <Tooltip title={test.multipleChoiceTestId}>
-                                                 <span>{test.multipleChoiceTestId.substring(0, 8)}...</span>
-                                             </Tooltip>
+                                            <Tooltip title={test.multipleChoiceTestId}>
+                                                <span>{test.multipleChoiceTestId.substring(0, 8)}...</span>
+                                            </Tooltip>
                                         </TableCell>
                                         <TableCell sx={{ fontWeight: 'medium' }}>{test.title || 'N/A'}</TableCell>
                                         <TableCell>
-                                             <Chip icon={<LanguageIcon fontSize="small"/>} label={`${test.learningLanguage || '?'} → ${test.nativeLanguage || '?'}`} size="small" variant="outlined" />
+                                            <Chip icon={<LanguageIcon fontSize="small"/>} label={`${test.learningLanguage || '?'} → ${test.nativeLanguage || '?'}`} size="small" variant="outlined" />
                                         </TableCell>
                                         <TableCell>
                                             {test.createAt ? format(new Date(test.createAt), 'dd/MM/yyyy HH:mm') : 'N/A'}
@@ -352,22 +433,42 @@ const MultipleChoiceTestsAdmin = () => {
                                             />
                                         </TableCell>
                                         <TableCell>
-                                             <Chip icon={<PeopleAltIcon fontSize="small"/>} label={test.learnerCount ?? 0} size="small" />
+                                            <Chip icon={<PeopleAltIcon fontSize="small"/>} label={test.learnerCount ?? 0} size="small" />
                                         </TableCell>
                                         <TableCell>
-                                             <Chip icon={<InfoIcon fontSize="small"/>} label={test.level ?? 'N/A'} size="small" />
+                                            <Chip icon={<InfoIcon fontSize="small"/>} label={test.level ?? 'N/A'} size="small" />
                                         </TableCell>
                                         <TableCell align="right">
-                                            <Tooltip title="Edit Test">
-                                                <IconButton size="small" onClick={() => handleEditTest(test)} color="primary">
+                                            <Tooltip title="View Test Details">
+                                                <IconButton 
+                                                    size="small" 
+                                                    onClick={() => handleViewTest(test.multipleChoiceTestId)} 
+                                                    color="primary"
+                                                >
+                                                    <VisibilityIcon fontSize="inherit" />
+                                                </IconButton>
+                                            </Tooltip>
+                                            {/* <Tooltip title="Edit Test">
+                                                <IconButton 
+                                                    size="small" 
+                                                    onClick={() => handleEditTest(test)} 
+                                                    color="primary"
+                                                >
                                                     <EditIcon fontSize="inherit" />
                                                 </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Delete Test">
-                                                <IconButton size="small" onClick={() => handleDeleteTest(test.multipleChoiceTestId)} color="error">
-                                                    <DeleteIcon fontSize="inherit"/>
-                                                </IconButton>
-                                            </Tooltip>
+                                            </Tooltip> */}
+                                            {canDelete && (
+                                                <Tooltip title="Delete Test">
+                                                    <IconButton 
+                                                        size="small" 
+                                                        onClick={() => handleDeleteTest(test.multipleChoiceTestId)} 
+                                                        color="error"
+                                                        disabled={deleting}
+                                                    >
+                                                        <DeleteIcon fontSize="inherit"/>
+                                                    </IconButton>
+                                                </Tooltip>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -391,6 +492,38 @@ const MultipleChoiceTestsAdmin = () => {
                     />
                 )}
             </Paper>
+
+            {/* Snackbar để hiển thị thông báo sau khi xóa */}
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={6000}
+                onClose={handleCloseSnackbar}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
+
+            {/* Disable delete buttons & show spinner when deleting */}
+            {deleting && (
+                <Box
+                    sx={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                        zIndex: 1300,
+                    }}
+                >
+                    <CircularProgress />
+                </Box>
+            )}
         </Box>
     );
 };
