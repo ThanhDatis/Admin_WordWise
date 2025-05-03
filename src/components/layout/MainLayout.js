@@ -264,12 +264,12 @@ function MainLayout() {
     {
       text: 'Courses',
       icon: <BookIcon />,
-      path: '/admin/courses',
+      path: '/admin/FlashcardSet',
     },
     {
       text: 'Lessons',
       icon: <SchoolIcon />,
-      path: '/admin/lessons',
+      path: '/admin/multiplechoice',
     },
     {
       text: 'Content Reports',

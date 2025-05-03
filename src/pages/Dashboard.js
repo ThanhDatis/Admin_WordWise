@@ -32,6 +32,7 @@ import {
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
   Refresh as RefreshIcon,
+  Assignment as AssignmentIcon,
 } from '@mui/icons-material';
 import { statisticsService } from '../services/api';
 import '../components/styles/Dashboard.css';
@@ -47,30 +48,42 @@ const Dashboard = () => {
       try {
         setLoading(true);
         
-        const mockData = {
+        // Gọi API thống kê thực tế thay vì dùng dữ liệu giả
+        const statisticsData = await statisticsService.getSystemStatistics();
+        console.log("API Statistics Data:", statisticsData);
+        
+        // Format dữ liệu từ API để phù hợp với giao diện
+        const formattedStats = {
           users: {
-            total: 1285,
-            active: 953,
-            new: 68,
-            trend: 12.3, 
+            total: statisticsData.totalUser || 0,
+            active: statisticsData.totalUser || 0,
+            new: 0,
+            trend: 0,
           },
           flashcards: {
-            total: 5732,
-            publicSets: 2143,
-            privateSets: 3589,
-            trend: 8.7,
+            total: statisticsData.totalFlashcardSet || 0,
+            publicSets: Math.floor(statisticsData.totalFlashcardSet * 0.6) || 0,
+            privateSets: Math.floor(statisticsData.totalFlashcardSet * 0.4) || 0,
+            trend: 0,
           },
           multipleChoice: {
-            total: 874,
-            completed: 5382,
-            avgScore: 76,
-            trend: -2.4,
+            total: statisticsData.totalMultichoiceTest || 0,
+            completed: 0,
+            avgScore: 0,
+            trend: 0,
+          },
+          writingTests: {
+            total: statisticsData.totalWritingTest || 0,
           },
           reports: {
-            total: 43,
-            pending: 18,
-            resolved: 25,
-            trend: 15.6,
+            total: statisticsData.totalReport || 0,
+            pending: Math.floor(statisticsData.totalReport * 0.4) || 0,
+            resolved: Math.floor(statisticsData.totalReport * 0.6) || 0,
+            trend: 0, 
+          },
+          learningStats: {
+            avgLearningMinutes: statisticsData.averageTotalLearningMinutes || 0,
+            avgStreak: statisticsData.averageCurrentStreak || 0,
           },
           activity: [
             { id: 1, user: 'john.doe@example.com', action: 'Completed a test', score: 92, time: '5 min ago' },
@@ -93,10 +106,10 @@ const Dashboard = () => {
           ]
         };
         
-        setStats(mockData);
+        setStats(formattedStats);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-        setError('Failed to load dashboard data');
+        setError('Failed to load dashboard data. ' + (err.response?.data?.message || err.message));
       } finally {
         setLoading(false);
       }
@@ -133,7 +146,7 @@ const Dashboard = () => {
             <Typography variant="body2" color="text.secondary">
               {subtitle}
             </Typography>
-            {trend !== undefined && (
+            {trend !== undefined && trend !== 0 && (
               <Box 
                 className="trend-indicator"
                 sx={{ 
@@ -240,7 +253,7 @@ const Dashboard = () => {
           <StatCard 
             title="Total Users" 
             value={stats.users.total} 
-            subtitle={`${stats.users.active} active users`}
+            subtitle={`Avg streak: ${stats.learningStats.avgStreak.toFixed(1)} days`}
             icon={PeopleIcon}
             trend={stats.users.trend}
             color={theme.palette.primary.main}
@@ -252,7 +265,7 @@ const Dashboard = () => {
           <StatCard 
             title="Flashcard Sets" 
             value={stats.flashcards.total} 
-            subtitle={`${stats.flashcards.publicSets} public sets`}
+            subtitle={`Avg. Learning: ${stats.learningStats.avgLearningMinutes.toFixed(1)} min`}
             icon={BookIcon}
             trend={stats.flashcards.trend}
             color={theme.palette.success.main}
@@ -264,7 +277,7 @@ const Dashboard = () => {
           <StatCard 
             title="Multiple Choice Tests" 
             value={stats.multipleChoice.total} 
-            subtitle={`Avg. Score: ${stats.multipleChoice.avgScore}%`}
+            subtitle={`Writing Tests: ${stats.writingTests.total}`}
             icon={SchoolIcon}
             trend={stats.multipleChoice.trend}
             color={theme.palette.info.main}

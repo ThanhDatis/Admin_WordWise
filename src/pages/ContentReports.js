@@ -54,6 +54,13 @@ import { useNavigate } from 'react-router-dom';
 //   COMMENT: 4,
 // };
 
+// Cập nhật ContentTypeReport enum theo API docs
+const ContentTypeReport = {
+  WRITING_EXERCISE: 0,
+  MULTIPLE_CHOICE: 1,
+  FLASHCARD_SET: 2,
+};
+
 // Enum for report status (CÁI NÀY VẪN ĐÚNG VÌ API DÙNG SỐ)
 const ReportStatus = {
   PENDING: 0,
@@ -61,28 +68,41 @@ const ReportStatus = {
   REJECTED: 2,
 };
 
-// *** SỬA HÀM NÀY ĐỂ NHẬN STRING ***
-// Convert content type string to readable string
-const getContentTypeLabel = (typeString) => {
-  // Thêm các case dựa trên các giá trị string thực tế API trả về
-  switch (typeString) {
-    case 'FlashcardSet': // Giả sử API trả về 'FlashcardSet'
-      return 'Flashcard Set';
-    case 'Flashcard': // Giả sử API trả về 'Flashcard'
-      return 'Flashcard';
-    case 'Lesson': // Giả sử API trả về 'Lesson'
-      return 'Lesson';
-    case 'Comment': // Giả sử API trả về 'Comment'
-      return 'Comment';
-    case 'MultipleChoice': // Dựa trên ví dụ API của bạn
-      return 'Multiple Choice';
-    // Thêm các loại khác nếu có
-    default:
-      return typeString || 'Unknown'; // Hiển thị chuỗi gốc nếu không khớp
+const getContentTypeLabel = (typeValue) => {
+  // Hàm này nhận vào value (có thể là số hoặc string) và trả về label
+  if (typeof typeValue === 'string') {
+    // Xử lý trường hợp backend trả về string
+    switch (typeValue) {
+      case 'FlashcardSet':
+        return 'Flashcard Set';
+      case 'Flashcard':
+        return 'Flashcard';
+      case 'Lesson':
+        return 'Lesson';
+      case 'Comment':
+        return 'Comment';
+      case 'MultipleChoice':
+        return 'Multiple Choice';
+      case 'WritingExercise':
+        return 'Writing Exercise';
+      default:
+        return typeValue || 'Unknown';
+    }
+  } else {
+    // Xử lý trường hợp là số (enum value)
+    switch (typeValue) {
+      case ContentTypeReport.WRITING_EXERCISE:
+        return 'Writing Exercise';
+      case ContentTypeReport.MULTIPLE_CHOICE:
+        return 'Multiple Choice';
+      case ContentTypeReport.FLASHCARD_SET:
+        return 'Flashcard Set';
+      default:
+        return `Unknown Type (${typeValue})`;
+    }
   }
 };
 
-// Convert status enum to readable string and color (HÀM NÀY VẪN ĐÚNG)
 const getStatusInfo = (status) => {
   switch (status) {
     case ReportStatus.PENDING:
@@ -102,8 +122,7 @@ const ContentReports = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
-  // const [totalPages, setTotalPages] = useState(0); // Không cần thiết nếu có totalItems
-  const [totalItems, setTotalItems] = useState(0); // Sử dụng totalItems cho TablePagination
+  const [totalItems, setTotalItems] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [selectedReport, setSelectedReport] = useState(null);
   const [openReportDialog, setOpenReportDialog] = useState(false);
@@ -117,8 +136,8 @@ const ContentReports = () => {
   // Filters
   const [filters, setFilters] = useState({
     userId: '',
-    contentType: '', // Sẽ là string
-    status: '',       // Sẽ là number (hoặc string rỗng)
+    contentType: '',
+    status: '',
     sortBy: 'CreateAt',
     isDesc: true,
   });
@@ -144,16 +163,17 @@ const ContentReports = () => {
       setError(null);
 
       const apiParams = {
-        userId: filters.userId || null, // Gửi null nếu rỗng để API bỏ qua
-        contentType: filters.contentType || null, // Gửi null nếu rỗng
-        status: filters.status !== '' ? Number(filters.status) : null, // Gửi null nếu rỗng, ép kiểu số nếu có giá trị
+        userId: filters.userId || null,
+        // Sửa contentType để đảm bảo gửi số thay vì string
+        contentType: filters.contentType !== '' ? Number(filters.contentType) : null,
+        status: filters.status !== '' ? Number(filters.status) : null,
         sortBy: filters.sortBy,
         isDesc: filters.isDesc,
-        currentPage: page + 1, // API dùng 1-based indexing
+        currentPage: page + 1,
         itemPerPage: rowsPerPage,
       };
 
-      console.log("Sending API params:", apiParams); // Log để debug params gửi đi
+      console.log("Sending API params:", apiParams);
 
       const response = await reportService.getAllReports(apiParams);
 
@@ -162,19 +182,20 @@ const ContentReports = () => {
       // *** SỬA CÁCH LẤY DỮ LIỆU TỪ RESPONSE ***
       if (response && response.contentReports) {
         setReports(response.contentReports);
-        // Tính toán totalItems nếu API không trả về totalCount
-        // Sử dụng response.totalPage (tên trường đúng từ API)
-        const calculatedTotalItems = (response.totalPage || 0) * (response.itemPerPage || rowsPerPage);
-        setTotalItems(calculatedTotalItems);
-        // setTotalPages(response.totalPage || 0); // Không cần set totalPages nữa
+        // Sử dụng trường chính xác từ API
+        if (response.totalCount !== undefined) {
+          setTotalItems(response.totalCount);
+        } else {
+          // Fallback - tính toán từ totalPage
+          const calculatedTotalItems = (response.totalPage || 0) * (response.itemPerPage || rowsPerPage);
+          setTotalItems(calculatedTotalItems);
+        }
       } else {
         // Xử lý trường hợp response không hợp lệ
         setReports([]);
         setTotalItems(0);
-        // setTotalPages(0);
         console.warn("API response structure might be different:", response);
       }
-
     } catch (err) {
       console.error('Error fetching reports:', err);
       const errorMessage = err.response?.data?.message || err.response?.data || err.message || 'Failed to load reports';
@@ -182,7 +203,6 @@ const ContentReports = () => {
       // Reset state khi có lỗi
       setReports([]);
       setTotalItems(0);
-      // setTotalPages(0);
     } finally {
       setLoading(false);
     }
@@ -454,14 +474,10 @@ const ContentReports = () => {
                   label="Content Type"
                   onChange={handleFilterChange}
                 >
-                  {/* *** SỬA VALUE CHO KHỚP VỚI STRING API *** */}
                   <MenuItem value="">All Types</MenuItem>
-                  <MenuItem value="FlashcardSet">Flashcard Set</MenuItem>
-                  {/* <MenuItem value="Flashcard">Flashcard</MenuItem> */}
-                  <MenuItem value="Lesson">Lesson</MenuItem>
-                  {/* <MenuItem value="Comment">Comment</MenuItem> */}
-                  <MenuItem value="MultipleChoice">Multiple Choice</MenuItem>
-                  {/* Thêm các loại khác nếu có */}
+                  <MenuItem value={ContentTypeReport.WRITING_EXERCISE}>Writing Exercise</MenuItem>
+                  <MenuItem value={ContentTypeReport.MULTIPLE_CHOICE}>Multiple Choice</MenuItem>
+                  <MenuItem value={ContentTypeReport.FLASHCARD_SET}>Flashcard Set</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
