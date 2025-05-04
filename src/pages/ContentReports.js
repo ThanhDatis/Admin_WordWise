@@ -249,21 +249,25 @@ const ContentReports = () => {
     setPage(0); // Fetch lại khi sort thay đổi (do useEffect)
   };
 
-  const handleViewReport = async (reportId) => {
-    try {
-      setLoading(true); // Nên có loading riêng cho dialog?
-      const report = await reportService.getReportById(reportId); // Giả sử API này trả về chi tiết
-      setSelectedReport(report);
-      setOpenReportDialog(true);
-    } catch (err) {
-      console.error('Error fetching report details:', err);
-      const errorMessage = err.response?.data?.message || err.response?.data || err.message || 'Failed to load report details';
-      setSnackbar({ open: true, message: errorMessage, severity: 'error' });
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+  const handleViewReport = (contentId, contentType) => {
+    if (!contentId || !contentType) {
+      setSnackbar({ open: true, message: 'Missing content info', severity: 'error' });
+      return;
     }
+  
+    let url = '';
+    if (contentType === 'FlashCard') {
+      url = `http://localhost:3000/flashcard-set/${contentId}`;
+    } else if (contentType === 'MultipleChoice') {
+      url = `http://localhost:3000/reading/test/${contentId}`;
+    } else {
+      setSnackbar({ open: true, message: 'Unsupported content type', severity: 'warning' });
+      return;
+    }
+  
+    window.open(url, '_blank');
   };
+  
 
   const handleCloseReportDialog = () => {
     setOpenReportDialog(false);
@@ -628,7 +632,7 @@ const ContentReports = () => {
                     <TableCell align="right">
                       <Tooltip title="View Details">
                         {/* Đổi tên reportId thành contentReportId */}
-                        <IconButton size="small" onClick={() => handleViewReport(report.contentReportId)}>
+                        <IconButton size="small" onClick={() => handleViewReport(report.contentId, report.contentType)}>
                           <VisibilityIcon fontSize="small"/>
                         </IconButton>
                       </Tooltip>
@@ -801,7 +805,7 @@ const ContentReports = () => {
             <Button 
               onClick={() => {
                 // Logic to view content based on type
-                if (confirmDialog.contentType === 'FlashcardSet') {
+                if (confirmDialog.contentType === 'FlashCard') {
                   // Navigate to flashcard set detail with ID
                   window.open(`/flashcard-sets/${confirmDialog.contentId}`, '_blank');
                 } else if (confirmDialog.contentType === 'MultipleChoice') {

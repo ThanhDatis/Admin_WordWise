@@ -254,9 +254,10 @@ const FlashcardSetsAdmin = () => {
     };
 
     const handleViewVocabularies = (setId) => {
-        console.log("View vocabularies for set:", setId);
-        navigate(`/flashcard-set/${setId}`);
-    };
+        const url = `/flashcard-set/${setId}`;
+        window.open(url, '_blank');
+      };
+      
     // --- Kết thúc Handlers ---
 
     return (

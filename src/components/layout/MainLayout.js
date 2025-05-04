@@ -262,12 +262,12 @@ function MainLayout() {
       path: '/admin/users',
     },
     {
-      text: 'Courses',
+      text: 'Flashcard Set',
       icon: <BookIcon />,
       path: '/admin/FlashcardSet',
     },
     {
-      text: 'Lessons',
+      text: 'Multiple Choice Test',
       icon: <SchoolIcon />,
       path: '/admin/multiplechoice',
     },

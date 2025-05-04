@@ -259,9 +259,10 @@ const MultipleChoiceTestsAdmin = () => {
 
     // Thêm hàm để xử lý sự kiện khi nhấp vào icon mắt
     const handleViewTest = (testId) => {
-        console.log("View test:", testId);
-        navigate(`/reading/test/${testId}`);
-    };
+        const url = `${window.location.origin}/reading/test/${testId}`;
+        window.open(url, '_blank');
+      };
+      
 
     // --- Kết thúc Handlers ---
 
